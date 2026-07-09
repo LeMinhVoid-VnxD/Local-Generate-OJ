@@ -777,9 +777,16 @@ JudgeResult judge_submission(const std::string& code, const Problem& problem, co
         if (result.verdict.empty()) result.verdict = "WA";
     }
 
-    // Cleanup
+    // Save copy to archives
+    std::string archive_dir = "submissions/archives";
+    fs::create_directories(archive_dir);
+    std::string archive_path = archive_dir + "/" + problem.id + "_" + std::to_string(time(nullptr)) + ".cpp";
+    write_file(archive_path, code);
+
+    // Cleanup temporary files
     fs::remove(src_path);
     fs::remove(exe_path);
+    fs::remove_all(work_dir);
 
     return result;
 }
