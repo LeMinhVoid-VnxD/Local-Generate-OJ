@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local OJ - Codeforces Modern</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-container">
+      <div class="logo-area" onclick="navigateTo('problems')">
+        <div class="logo-icon">
+          <i data-lucide="terminal"></i>
+        </div>
+        <span class="logo-text">Local <span class="accent-text">OJ</span></span>
+      </div>
+      <nav class="nav-links">
+        <a href="#/problems" class="nav-link active" id="nav-problems">
+          <i data-lucide="code-2"></i> Bài tập
+        </a>
+      </nav>
+      <div class="nav-actions">
+        <button onclick="reloadProblems()" class="btn-reload" title="Tải lại danh sách từ ổ đĩa">
+          <i data-lucide="rotate-cw" id="reload-icon"></i> Đồng bộ
+        </button>
+        <button onclick="openSettings()" class="btn-settings" title="Cài đặt">
+          <i data-lucide="settings"></i> Cài đặt
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    
+    <!-- view 1: Problems List -->
+    <section id="view-problems" class="view">
+      <div class="section-header">
+        <div class="header-title-area">
+          <h2>Danh sách bài tập</h2>
+          <p class="subtitle">Hãy giải các bài tập lập trình bên dưới để rèn luyện tư duy</p>
+        </div>
+      </div>
+
+      <!-- Categories Tabs & Filter -->
+      <div class="filter-bar">
+        <div class="category-tabs" id="categoryTabs">
+          <button class="tab-btn active" onclick="filterCategory('all')">Tất cả</button>
+          <button class="tab-btn" onclick="filterCategory('dp')">Quy hoạch động</button>
+          <button class="tab-btn" onclick="filterCategory('binary_search')">Chặt nhị phân</button>
+          <button class="tab-btn" onclick="filterCategory('greedy')">Tham lam</button>
+          <button class="tab-btn" onclick="filterCategory('graph')">Đồ thị</button>
+          <button class="tab-btn" onclick="filterCategory('math')">Toán học</button>
+          <button class="tab-btn" onclick="filterCategory('string')">Xử lý xâu</button>
+          <button class="tab-btn" onclick="filterCategory('data_structure')">Cấu trúc dữ liệu</button>
+          <button class="tab-btn" onclick="filterCategory('other')">Khác</button>
+        </div>
+        <div class="search-box">
+          <i data-lucide="search"></i>
+          <input type="text" id="searchInput" placeholder="Tìm tên bài..." oninput="handleSearch()">
+        </div>
+      </div>
+
+      <!-- Problems Table -->
+      <div class="table-container">
+        <table class="problems-table">
+          <thead>
+            <tr>
+              <th style="width: 80px;">Trạng thái</th>
+              <th>Tên bài tập</th>
+              <th style="width: 180px;">Chủ đề</th>
+              <th style="width: 120px;">Độ khó</th>
+              <th style="width: 120px;">Subtasks</th>
+              <th style="width: 120px;">Số testcase</th>
+            </tr>
+          </thead>
+          <tbody id="problemsTableBody">
+            <!-- Loading Skeleton -->
+            <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+            <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+            <tr class="skeleton-row"><td colspan="6"><div class="skeleton"></div></td></tr>
+          </tbody>
+        </table>
+        <div id="noProblemsMessage" class="no-data hidden">
+          <i data-lucide="folder-open"></i>
+          <p>Không tìm thấy bài tập nào phù hợp.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- view 2: Problem Detail -->
+    <section id="view-problem-detail" class="view hidden">
+      <div class="problem-detail-layout">
+        
+        <!-- Left: Statement -->
+        <article class="statement-column">
+          <div class="card statement-card">
+            <button onclick="navigateTo('problems')" class="btn-back">
+              <i data-lucide="arrow-left"></i> Quay lại
+            </button>
+            
+            <h1 id="prob-title" class="prob-title">Tải dữ liệu...</h1>
+            
+            <div class="meta-pills">
+              <span class="meta-pill" id="prob-difficulty">Medium</span>
+              <span class="meta-pill" id="prob-category">DP</span>
+              <span class="meta-pill"><i data-lucide="clock"></i> Giới hạn thời gian: <span id="prob-time-limit">1.0s</span></span>
+              <span class="meta-pill"><i data-lucide="cpu"></i> Bộ nhớ: <span id="prob-memory-limit">256MB</span></span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="statement-section">
+              <h3>Mô tả bài toán</h3>
+              <div id="prob-description" class="rich-text"></div>
+            </div>
+
+            <div class="statement-section" id="section-input-format">
+              <h3>Định dạng đầu vào</h3>
+              <div id="prob-input-format" class="rich-text"></div>
+            </div>
+
+            <div class="statement-section" id="section-output-format">
+              <h3>Định dạng đầu ra</h3>
+              <div id="prob-output-format" class="rich-text"></div>
+            </div>
+
+            <div class="statement-section" id="section-constraints">
+              <h3>Ràng buộc</h3>
+              <div id="prob-constraints" class="rich-text"></div>
+            </div>
+
+            <!-- Subtask list -->
+            <div class="statement-section" id="section-subtasks">
+              <h3>Subtasks</h3>
+              <div class="subtask-list" id="prob-subtasks">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Samples -->
+            <div class="statement-section" id="section-samples">
+              <h3>Ví dụ minh hoạ</h3>
+              <div id="prob-samples">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Right: Submit & Status -->
+        <aside class="submit-column">
+          <div class="card submit-card sticky-panel">
+            <div class="panel-header">
+              <h2>Nộp bài giải</h2>
+            </div>
+            
+            <div class="form-group">
+              <label for="languageSelect">Ngôn ngữ dịch</label>
+              <select id="languageSelect" class="form-control">
+                <option value="cpp">C++17 (g++ -O2)</option>
+              </select>
+            </div>
+
+            <div class="form-group editor-group">
+              <div class="editor-header">
+                <label>Mã nguồn</label>
+                <div class="editor-actions">
+                  <button class="editor-action-btn" onclick="clearEditor()" title="Xoá sạch">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                  <button class="editor-action-btn" onclick="copyFromClipboard()" title="Dán từ Clipboard">
+                    <i data-lucide="clipboard"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="editor-wrapper">
+                <textarea id="codeEditor" placeholder="// Nhập code C++ của bạn ở đây..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+              </div>
+            </div>
+
+            <button onclick="handleCodeSubmit()" class="btn-submit-code" id="btnSubmit">
+              <i data-lucide="send"></i> Nộp bài (Ctrl+Enter)
+            </button>
+
+            <!-- Submission results box -->
+            <div id="quickResultBox" class="quick-result-box hidden">
+              <div class="quick-result-header">
+                <span class="result-title">Kết quả chấm điểm</span>
+                <span id="quickVerdict" class="verdict-text WA">Wrong Answer</span>
+              </div>
+              
+              <!-- Points Progress Bar -->
+              <div class="score-display-area">
+                <span class="score-label">Điểm số:</span>
+                <span class="score-value" id="quickScore">60 / 100</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="quickScoreProgress" style="width: 60%;"></div>
+              </div>
+
+              <!-- Subtasks list results -->
+              <div class="subtask-results-mini" id="quickSubtaskResults">
+                <!-- Rendered dynamically -->
+              </div>
+              
+              <button onclick="showDetailedResultModal()" class="btn-detail-result">
+                Xem chi tiết các testcase <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal 1: Settings -->
+  <div id="modal-settings" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Cài đặt môi trường</h2>
+        <button class="modal-close-btn" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="settings-editor-size">Cỡ chữ Editor</label>
+          <select id="settings-editor-size" class="form-control" onchange="applySettings()">
+            <option value="13px">13 px</option>
+            <option value="14px" selected>14 px</option>
+            <option value="15px">15 px</option>
+            <option value="16px">16 px</option>
+            <option value="18px">18 px</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="settings-tab-size">Độ rộng Tab (Spaces)</label>
+          <select id="settings-tab-size" class="form-control" onchange="applySettings()">
+            <option value="2">2 spaces</option>
+            <option value="4" selected>4 spaces</option>
+            <option value="8">8 spaces</option>
+          </select>
+        </div>
+        <p class="settings-info-text">
+          <i data-lucide="info" style="width: 14px; height: 14px; display: inline; vertical-align: middle; margin-right: 4px;"></i>
+          Local OJ sử dụng trình biên dịch g++ từ MSYS2 được cấu hình sẵn trên máy của bạn.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="closeSettings()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Detailed Judge Results -->
+  <div id="modal-results" class="modal-overlay hidden">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-result-title">Chi tiết chấm bài</h2>
+          <p class="modal-subtitle" id="modal-result-subtitle">Bài: Tìm kiếm phần tử</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeDetailedResultModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Summary Verdict -->
+        <div class="summary-verdict-card">
+          <div class="verdict-badge-large" id="modalVerdictLarge">Accepted</div>
+          <div class="verdict-points-display">
+            <span class="points-label">Tổng điểm</span>
+            <span class="points-nums" id="modalPoints">100 / 100</span>
+          </div>
+        </div>
+
+        <!-- Compile Error Area (Visible only on CE) -->
+        <div id="compileErrorContainer" class="compile-error-card hidden">
+          <h4>Thông tin lỗi biên dịch (Compiler Output):</h4>
+          <pre id="compileErrorText"></pre>
+        </div>
+
+        <!-- Subtasks Table -->
+        <div class="modal-section-title">Kết quả theo Subtask</div>
+        <div class="table-container">
+          <table class="subtask-results-table">
+            <thead>
+              <tr>
+                <th>Subtask ID</th>
+                <th>Điểm số</th>
+                <th>Yêu cầu ràng buộc</th>
+                <th>Trạng thái</th>
+                <th>Testcase đúng</th>
+              </tr>
+            </thead>
+            <tbody id="modalSubtaskTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Test cases Detail list -->
+        <div class="modal-section-title">Danh sách Testcase chi tiết</div>
+        <div class="testcases-detail-list" id="modalTestcaseList">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="closeDetailedResultModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/script.js"></script>
+</body>
+</html>

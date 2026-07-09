@@ -1,0 +1,35 @@
+{
+  "title": "Tổng hai số",
+  "category": "other",
+  "difficulty": "easy",
+  "time_limit": 1.0,
+  "memory_limit": 256,
+  "description": "Cho hai số nguyên A và B. Hãy tính và in ra tổng của chúng.",
+  "input_format": "Một dòng duy nhất chứa hai số nguyên A và B (−1000 ≤ A, B ≤ 1000), cách nhau bởi dấu cách.",
+  "output_format": "In ra một số nguyên duy nhất là tổng A + B.",
+  "constraints": "−1000 ≤ A, B ≤ 1000",
+  "samples": [
+    {
+      "input": "3 5\n",
+      "output": "8\n",
+      "explanation": "3 + 5 = 8"
+    },
+    {
+      "input": "-2 7\n",
+      "output": "5\n",
+      "explanation": "-2 + 7 = 5"
+    }
+  ],
+  "test_cases": [
+    { "input": "3 5\n", "output": "8\n" },
+    { "input": "-2 7\n", "output": "5\n" },
+    { "input": "0 0\n", "output": "0\n" },
+    { "input": "1000 -1000\n", "output": "0\n" },
+    { "input": "-999 -1\n", "output": "-1000\n" },
+    { "input": "123 456\n", "output": "579\n" },
+    { "input": "1 999\n", "output": "1000\n" },
+    { "input": "-500 500\n", "output": "0\n" },
+    { "input": "42 58\n", "output": "100\n" },
+    { "input": "-1000 -1000\n", "output": "-2000\n" }
+  ]
+}
