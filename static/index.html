@@ -166,6 +166,26 @@
               </div>
             </div>
 
+            <!-- Solution Help -->
+            <div class="statement-section">
+              <h3>Hỗ trợ giải bài</h3>
+              <div class="solution-buttons">
+                <button onclick="requestSolutionHint()" class="btn btn-hint">
+                  <i data-lucide="lightbulb"></i> Hướng dẫn giải
+                </button>
+                <button onclick="requestSolutionCode()" class="btn btn-code">
+                  <i data-lucide="code"></i> Code giải
+                </button>
+              </div>
+              <div id="solution-result" class="solution-result hidden">
+                <div class="solution-result-header">
+                  <span id="solution-result-title">Hướng dẫn giải</span>
+                  <button onclick="closeSolutionResult()" class="btn-close"><i data-lucide="x"></i></button>
+                </div>
+                <div id="solution-result-body" class="solution-result-body rich-text"></div>
+              </div>
+            </div>
+
             <!-- AI Chat -->
             <div class="statement-section chat-section">
               <h3><i data-lucide="bot" style="width:16px;height:16px;vertical-align:middle;"></i> Hỏi đáp AI</h3>
