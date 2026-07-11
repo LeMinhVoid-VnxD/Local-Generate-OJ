@@ -2061,9 +2061,23 @@ class HttpServer {
                 return resp;
             }
 
-            std::string system_prompt = "Bạn là chuyên gia hướng dẫn lập trình thi đấu. Sử dụng $...$ cho công thức toán học.";
-            std::string user_prompt = build_solution_hint_prompt(*problem);
-            std::string raw = call_ai_provider(provider, api_key, model, system_prompt, user_prompt);
+            // Check cache
+            std::string raw;
+            {
+                std::string cache_path = "data\\cache\\" + problem_id + "_hint.json";
+                std::ifstream cf(cache_path);
+                if (cf) {
+                    std::stringstream ss; ss << cf.rdbuf();
+                    JsonParser cp(ss.str());
+                    auto cj = cp.parse();
+                    raw = cj.get_string("reply", "");
+                }
+            }
+            if (raw.empty()) {
+                std::string system_prompt = "Bạn là chuyên gia hướng dẫn lập trình thi đấu. Sử dụng $...$ cho công thức toán học.";
+                std::string user_prompt = build_solution_hint_prompt(*problem);
+                raw = call_ai_provider(provider, api_key, model, system_prompt, user_prompt);
+            }
 
             if (raw.empty()) {
                 JsonValue err(JsonValue::Object);
@@ -2076,6 +2090,20 @@ class HttpServer {
                 err.set("error", JsonValue("Lỗi AI: " + raw.substr(10)));
                 resp.body = err.to_string();
                 return resp;
+            }
+
+            // Cache response
+            {
+                CreateDirectoryA("data", NULL);
+                CreateDirectoryA("data\\cache", NULL);
+                std::string cache_path = "data\\cache\\" + problem_id + "_hint.json";
+                JsonValue cached(JsonValue::Object);
+                cached.set("problem_id", JsonValue(problem_id));
+                cached.set("type", JsonValue("hint"));
+                cached.set("reply", JsonValue(raw));
+                cached.set("time", JsonValue(std::to_string(std::time(nullptr))));
+                std::ofstream cf(cache_path);
+                if (cf) { cf << cached.to_string(); }
             }
 
             // Try to extract JSON from response
@@ -2122,9 +2150,23 @@ class HttpServer {
                 return resp;
             }
 
-            std::string system_prompt = "Bạn là lập trình viên C++ thi đấu chuyên nghiệp. Sử dụng $...$ cho công thức toán học.";
-            std::string user_prompt = build_solution_code_prompt(*problem);
-            std::string raw = call_ai_provider(provider, api_key, model, system_prompt, user_prompt);
+            // Check cache
+            std::string raw;
+            {
+                std::string cache_path = "data\\cache\\" + problem_id + "_code.json";
+                std::ifstream cf(cache_path);
+                if (cf) {
+                    std::stringstream ss; ss << cf.rdbuf();
+                    JsonParser cp(ss.str());
+                    auto cj = cp.parse();
+                    raw = cj.get_string("reply", "");
+                }
+            }
+            if (raw.empty()) {
+                std::string system_prompt = "Bạn là lập trình viên C++ thi đấu chuyên nghiệp. Sử dụng $...$ cho công thức toán học.";
+                std::string user_prompt = build_solution_code_prompt(*problem);
+                raw = call_ai_provider(provider, api_key, model, system_prompt, user_prompt);
+            }
 
             if (raw.empty()) {
                 JsonValue err(JsonValue::Object);
@@ -2137,6 +2179,20 @@ class HttpServer {
                 err.set("error", JsonValue("Lỗi AI: " + raw.substr(10)));
                 resp.body = err.to_string();
                 return resp;
+            }
+
+            // Cache response
+            {
+                CreateDirectoryA("data", NULL);
+                CreateDirectoryA("data\\cache", NULL);
+                std::string cache_path = "data\\cache\\" + problem_id + "_code.json";
+                JsonValue cached(JsonValue::Object);
+                cached.set("problem_id", JsonValue(problem_id));
+                cached.set("type", JsonValue("code"));
+                cached.set("reply", JsonValue(raw));
+                cached.set("time", JsonValue(std::to_string(std::time(nullptr))));
+                std::ofstream cf(cache_path);
+                if (cf) { cf << cached.to_string(); }
             }
 
             std::string json_str = extract_json(raw);
