@@ -337,7 +337,7 @@ async function viewProblemDetail(id) {
   document.getElementById('chatMessages').innerHTML = '';
   chatHistory = [];
   setTimeout(function() {
-    sendChatMessage('Hãy hướng dẫn tôi giải bài này: thuật toán, cách tiếp cận, độ phức tạp.');
+    sendChatMessage('Hãy hướng dẫn tôi giải bài này: thuật toán, cách tiếp cận, thời gian và bộ nhớ (độ phức tạp).');
   }, 300);
   
   lucide.createIcons();
