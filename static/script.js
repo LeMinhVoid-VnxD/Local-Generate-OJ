@@ -333,12 +333,18 @@ async function viewProblemDetail(id) {
     localStorage.setItem('oj_editor_drafts', JSON.stringify(drafts));
   };
 
-  // Clear old chat and auto-request hint
+  // Clear old chat
   document.getElementById('chatMessages').innerHTML = '';
   chatHistory = [];
-  setTimeout(function() {
-    sendChatMessage('Hãy hướng dẫn tôi giải bài này: thuật toán, cách tiếp cận, thời gian và bộ nhớ (độ phức tạp).');
-  }, 300);
+
+  // Auto-request hint (if enabled)
+  var cfg = {};
+  try { cfg = JSON.parse(localStorage.getItem('oj_local_settings') || '{}'); } catch(e) {}
+  if (cfg.autoRequest !== false) {
+    setTimeout(function() {
+      sendChatMessage('Hãy hướng dẫn tôi giải bài này: thuật toán, cách tiếp cận, thời gian và bộ nhớ (độ phức tạp).');
+    }, 300);
+  }
   
   lucide.createIcons();
 }
@@ -895,7 +901,8 @@ function saveSettings() {
     apiBase: document.getElementById('settings-api-url').value.trim(),
     aiProvider: document.getElementById('settings-ai-provider').value,
     aiModel: document.getElementById('settings-ai-model').value,
-    aiKey: document.getElementById('settings-ai-key').value
+    aiKey: document.getElementById('settings-ai-key').value,
+    autoRequest: document.getElementById('settings-auto-request').checked
   };
   localStorage.setItem('oj_local_settings', JSON.stringify(data));
 }
@@ -911,8 +918,10 @@ function loadSettingsToUI() {
     if (s.aiProvider) document.getElementById('settings-ai-provider').value = s.aiProvider;
     populateSettingsAIModels(s.aiModel);
     if (s.aiKey) document.getElementById('settings-ai-key').value = s.aiKey;
+    document.getElementById('settings-auto-request').checked = s.autoRequest !== false;
   } else {
     populateSettingsAIModels();
+    document.getElementById('settings-auto-request').checked = true;
   }
 }
 
