@@ -347,20 +347,115 @@ function fillOrHideSection(sectionId, elementId, value) {
   }
 }
 
+// ---------- Solution Help ----------
+async function requestSolutionHint() {
+  requestSolution('hint', 'Hướng dẫn giải');
+}
+
+async function requestSolutionCode() {
+  requestSolution('code', 'Code giải');
+}
+
+async function requestSolution(type, title) {
+  if (!currentProblem) {
+    showToast('Vui lòng chọn bài tập trước.', 'error');
+    return;
+  }
+  // Read config from saved settings
+  var cfg = { aiKey: '', aiProvider: 'openai' };
+  var raw = localStorage.getItem('oj_local_settings');
+  if (raw) { try { cfg = JSON.parse(raw); } catch(e) {} }
+  var apiKey = cfg.aiKey || '';
+  var provider = cfg.aiProvider || 'openai';
+  if (!apiKey) {
+    showToast('Vui lòng nhập API key trong Settings > Cấu hình AI.', 'error');
+    return;
+  }
+
+  const resultBox = document.getElementById('solution-result');
+  const resultTitle = document.getElementById('solution-result-title');
+  const resultBody = document.getElementById('solution-result-body');
+  resultTitle.textContent = 'Đang tải...';
+  resultBody.textContent = '';
+  resultBox.classList.remove('hidden');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  try {
+    const resp = await fetch(API_BASE + '/api/solution/' + type, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ problem_id: currentProblem.id, api_key: apiKey, provider: provider })
+    });
+    const data = await resp.json();
+
+    resultTitle.textContent = title;
+    if (data.error) {
+      resultBody.innerHTML = '<span style="color:var(--danger)">' + data.error + '</span>';
+    } else if (type === 'hint') {
+      let html = '';
+      if (data.approach) html += '<p><strong>Cách tiếp cận:</strong></p><p>' + formatRichText(data.approach) + '</p>';
+      if (data.algorithm) html += '<p><strong>Thuật toán:</strong> ' + formatRichText(data.algorithm) + '</p>';
+      if (data.complexity) html += '<p><strong>Độ phức tạp:</strong> ' + data.complexity + '</p>';
+      if (data.key_insight) html += '<p><strong>Mấu chốt:</strong> ' + formatRichText(data.key_insight) + '</p>';
+      if (data.steps && Array.isArray(data.steps)) {
+        html += '<p><strong>Các bước:</strong></p><ol>';
+        data.steps.forEach(function(s) { html += '<li>' + formatRichText(s) + '</li>'; });
+        html += '</ol>';
+      }
+      resultBody.innerHTML = html || formatRichText(JSON.stringify(data, null, 2));
+    } else if (type === 'code') {
+      if (data.code) {
+        resultBody.innerHTML = '<pre class="code-solution">' + data.code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+        if (data.explanation) {
+          resultBody.innerHTML += '<p><strong>Giải thích:</strong> ' + formatRichText(data.explanation) + '</p>';
+        }
+        if (data.complexity) {
+          resultBody.innerHTML += '<p><strong>Độ phức tạp:</strong> ' + data.complexity + '</p>';
+        }
+      } else {
+        resultBody.innerHTML = formatRichText(JSON.stringify(data, null, 2));
+      }
+    }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  } catch (e) {
+    resultTitle.textContent = 'Lỗi';
+    resultBody.innerHTML = '<span style="color:var(--danger)">Lỗi kết nối: ' + e.message + '</span>';
+  }
+}
+
+function closeSolutionResult() {
+  document.getElementById('solution-result').classList.add('hidden');
+}
+
 function formatRichText(text) {
   if (!text) return '';
-  // Escape HTML entities first
-  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  // Convert $...$ math notation to styled spans
-  text = text.replace(/\$([^$]+)\$/g, function(match, inner) {
-    // Convert ^ for superscript: x^y -> x<sup>y</sup>
-    inner = inner.replace(/\^(\w+|\{[^}]+\})/g, '<sup>$1</sup>');
-    // Convert _ for subscript: x_y -> x<sub>y</sub>
-    inner = inner.replace(/_(\w+|\{[^}]+\})/g, '<sub>$1</sub>');
-    return '<span class="math-inline">' + inner + '</span>';
-  });
-  // Then line breaks
-  return text.replace(/\n/g, '<br>');
+  // Shared math transformations (safe to apply on plain text, no HTML entities involved)
+  function applyMath(s) {
+    s = s.replace(/\^\{([^}]+)\}/g, '<sup>$1</sup>');
+    s = s.replace(/\^(\w+)/g, '<sup>$1</sup>');
+    s = s.replace(/_\{([^}]+)\}/g, '<sub>$1</sub>');
+    s = s.replace(/_(\w+)/g, '<sub>$1</sub>');
+    s = s.replace(/\\le/g, '≤').replace(/\\ge/g, '≥');
+    s = s.replace(/\\neq/g, '≠').replace(/\\cdot/g, '·');
+    s = s.replace(/\\times/g, '×').replace(/\\infty/g, '∞');
+    s = s.replace(/\\sqrt\{([^}]+)\}/g, '√$1');
+    s = s.replace(/[{}]/g, '');
+    return s;
+  }
+  // Split by $...$ to isolate math sections
+  var parts = text.split(/(\$[^$]+\$)/);
+  for (var i = 0; i < parts.length; i++) {
+    var isMath = parts[i].charAt(0) === '$' && parts[i].charAt(parts[i].length-1) === '$';
+    if (isMath) {
+      var inner = applyMath(parts[i].slice(1, -1));
+      parts[i] = '<span class="math-inline">' + inner + '</span>';
+    } else {
+      // For non-math: escape HTML first, then apply math (safe because ^ _ \ {} are not HTML special)
+      var s = parts[i].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      parts[i] = applyMath(s);
+    }
+  }
+  return parts.join('').replace(/\n/g, '<br>');
 }
 
 // Copy Sample input helper
@@ -659,7 +754,10 @@ function closeDetailedResultModal() {
 // Settings Modal Flow
 // ==========================================================================
 function openSettings() {
+  populateSettingsAIModels();
+  loadSettingsToUI();
   document.getElementById('modal-settings').classList.remove('hidden');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function closeSettings() {
@@ -671,12 +769,15 @@ function saveSettings() {
     editorSize: document.getElementById('settings-editor-size').value,
     tabSize: document.getElementById('settings-tab-size').value,
     compilerPath: document.getElementById('settings-compiler-path').value.trim(),
-    apiBase: document.getElementById('settings-api-url').value.trim()
+    apiBase: document.getElementById('settings-api-url').value.trim(),
+    aiProvider: document.getElementById('settings-ai-provider').value,
+    aiModel: document.getElementById('settings-ai-model').value,
+    aiKey: document.getElementById('settings-ai-key').value
   };
   localStorage.setItem('oj_local_settings', JSON.stringify(data));
 }
 
-function loadSettings() {
+function loadSettingsToUI() {
   const raw = localStorage.getItem('oj_local_settings');
   if (raw) {
     const s = JSON.parse(raw);
@@ -684,8 +785,26 @@ function loadSettings() {
     document.getElementById('settings-tab-size').value = s.tabSize || '4';
     document.getElementById('settings-compiler-path').value = s.compilerPath || '';
     document.getElementById('settings-api-url').value = s.apiBase || '';
+    if (s.aiProvider) document.getElementById('settings-ai-provider').value = s.aiProvider;
+    populateSettingsAIModels(s.aiModel);
+    if (s.aiKey) document.getElementById('settings-ai-key').value = s.aiKey;
+  } else {
+    populateSettingsAIModels();
   }
-  applySettings();
+}
+
+function populateSettingsAIModels(selectedModel) {
+  const provider = document.getElementById('settings-ai-provider').value;
+  const sel = document.getElementById('settings-ai-model');
+  sel.innerHTML = '';
+  const models = GEN_MODELS[provider] || [];
+  models.forEach(function(m) {
+    var opt = document.createElement('option');
+    opt.value = m.value;
+    opt.textContent = m.label;
+    if (m.value === selectedModel) opt.selected = true;
+    sel.appendChild(opt);
+  });
 }
 
 function applySettings() {
@@ -698,12 +817,16 @@ function applySettings() {
   editor.style.fontSize = size;
   editor.style.tabSize = tab;
   
-  // Update API_BASE and localStorage
   const apiVal = apiUrl || '';
   localStorage.setItem('api_base', apiVal);
   API_BASE = apiVal;
   
   saveSettings();
+}
+
+function loadSettings() {
+  loadSettingsToUI();
+  applySettings();
 }
 
 // ==========================================================================
@@ -846,6 +969,24 @@ const GEN_MODELS = {
   ]
 };
 
+function loadGenerateConfig() {
+  var raw = localStorage.getItem('oj_local_settings');
+  if (!raw) return;
+  var s = JSON.parse(raw);
+  if (s.aiProvider) document.getElementById('gen-provider').value = s.aiProvider;
+  if (s.aiKey) document.getElementById('gen-api-key').value = s.aiKey;
+  onProviderChange(s.aiModel);
+}
+
+function saveGenerateConfig() {
+  var raw = localStorage.getItem('oj_local_settings');
+  var s = raw ? JSON.parse(raw) : {};
+  s.aiProvider = document.getElementById('gen-provider').value;
+  s.aiModel = document.getElementById('gen-model').value;
+  s.aiKey = document.getElementById('gen-api-key').value;
+  localStorage.setItem('oj_local_settings', JSON.stringify(s));
+}
+
 function openGenerateModal() {
   document.getElementById('modal-generate').classList.remove('hidden');
   document.getElementById('gen-result-area').classList.add('hidden');
@@ -854,7 +995,7 @@ function openGenerateModal() {
   document.getElementById('gen-result-error').classList.add('hidden');
   document.getElementById('btnGenSubmit').disabled = false;
   document.getElementById('btnGenSubmit').innerHTML = '<i data-lucide="wand-2"></i> Sinh đề';
-  onProviderChange();
+  loadGenerateConfig();
   lucide.createIcons();
 }
 
@@ -862,7 +1003,7 @@ function closeGenerateModal() {
   document.getElementById('modal-generate').classList.add('hidden');
 }
 
-function onProviderChange() {
+function onProviderChange(selectedModel) {
   const provider = document.getElementById('gen-provider').value;
   const input = document.getElementById('gen-api-key');
   const modelSelect = document.getElementById('gen-model');
@@ -880,8 +1021,10 @@ function onProviderChange() {
     const opt = document.createElement('option');
     opt.value = m.value;
     opt.textContent = m.label;
+    if (selectedModel && m.value === selectedModel) opt.selected = true;
     modelSelect.appendChild(opt);
   });
+  saveGenerateConfig();
 }
 
 function updateGenSubTypes() {
@@ -899,6 +1042,7 @@ function updateGenSubTypes() {
     opt.textContent = t;
     subSelect.appendChild(opt);
   });
+  saveGenerateConfig();
 }
 
 async function handleGenerateProblem() {

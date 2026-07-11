@@ -165,6 +165,26 @@
                 <!-- Rendered dynamically -->
               </div>
             </div>
+
+            <!-- Solution Help -->
+            <div class="statement-section">
+              <h3>Hỗ trợ giải bài</h3>
+              <div class="solution-buttons">
+                <button onclick="requestSolutionHint()" class="btn btn-hint">
+                  <i data-lucide="lightbulb"></i> Hướng dẫn giải
+                </button>
+                <button onclick="requestSolutionCode()" class="btn btn-code">
+                  <i data-lucide="code"></i> Code giải
+                </button>
+              </div>
+              <div id="solution-result" class="solution-result hidden">
+                <div class="solution-result-header">
+                  <span id="solution-result-title">Hướng dẫn giải</span>
+                  <button onclick="closeSolutionResult()" class="btn-close"><i data-lucide="x"></i></button>
+                </div>
+                <div id="solution-result-body" class="solution-result-body rich-text"></div>
+              </div>
+            </div>
           </div>
         </article>
 
@@ -433,9 +453,30 @@
           <input type="text" id="settings-api-url" class="form-control" placeholder="http://localhost:8080" onchange="applySettings()">
           <span style="font-size:0.8em;color:var(--text-muted);">Để trống nếu chạy local. Điền URL khi frontend trên GitHub Pages.</span>
         </div>
+
+        <div class="divider" style="margin:16px 0"></div>
+        <h3 style="font-size:1em;margin-bottom:12px;color:var(--primary-hover);border-left:3px solid var(--primary);padding-left:8px;">Cấu hình AI (mặc định)</h3>
+
+        <div class="form-group">
+          <label for="settings-ai-provider">Nhà cung cấp AI</label>
+          <select id="settings-ai-provider" class="form-control" onchange="populateSettingsAIModels();applySettings()">
+            <option value="openai">OpenAI (GPT)</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="gemini">Gemini (Google)</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="settings-ai-model">Model</label>
+          <select id="settings-ai-model" class="form-control" onchange="applySettings()"></select>
+        </div>
+        <div class="form-group">
+          <label for="settings-ai-key">API Key</label>
+          <input type="password" id="settings-ai-key" class="form-control" placeholder="sk-..." autocomplete="off" onchange="applySettings()">
+        </div>
         <p class="settings-info-text">
-          <i data-lucide="info" style="width: 14px; height: 14px; display: inline; vertical-align: middle; margin-right: 4px;"></i>
-          Local OJ sử dụng trình biên dịch g++ từ MSYS2 được cấu hình sẵn trên máy của bạn.
+          <i data-lucide="info" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px;"></i>
+          Cấu hình AI sẽ được dùng cho tạo đề, hướng dẫn giải và code giải. Có thể thay đổi trong từng modal riêng.
         </p>
       </div>
       <div class="modal-footer">
@@ -469,12 +510,12 @@
           <!-- Model -->
           <div class="form-group">
             <label for="gen-model">Model</label>
-            <select id="gen-model" class="form-control"></select>
+            <select id="gen-model" class="form-control" onchange="saveGenerateConfig()"></select>
           </div>
           <!-- API Key -->
           <div class="form-group">
             <label for="gen-api-key">API Key</label>
-            <input type="password" id="gen-api-key" class="form-control" placeholder="sk-..." autocomplete="off">
+            <input type="password" id="gen-api-key" class="form-control" placeholder="sk-..." autocomplete="off" onchange="saveGenerateConfig()">
           </div>
           <!-- Category -->
           <div class="form-group">
@@ -494,14 +535,14 @@
           <!-- Sub-type -->
           <div class="form-group">
             <label for="gen-sub-type">Dạng cụ thể</label>
-            <select id="gen-sub-type" class="form-control">
+            <select id="gen-sub-type" class="form-control" onchange="saveGenerateConfig()">
               <option value="">-- Chọn thể loại trước --</option>
             </select>
           </div>
           <!-- Rating range -->
           <div class="form-group">
             <label for="gen-rating">Độ khó (CF Rating)</label>
-            <select id="gen-rating" class="form-control">
+            <select id="gen-rating" class="form-control" onchange="saveGenerateConfig()">
               <option value="">-- Mặc định (AI tự chọn) --</option>
               <option value="easy">Easy (&lt; 1000)</option>
               <option value="medium">Medium (1000-1499)</option>
@@ -514,7 +555,7 @@
           <!-- Subtask count -->
           <div class="form-group">
             <label for="gen-subtask-count">Số subtask</label>
-            <select id="gen-subtask-count" class="form-control">
+            <select id="gen-subtask-count" class="form-control" onchange="saveGenerateConfig()">
               <option value="1">1 subtask</option>
               <option value="2">2 subtasks</option>
               <option value="3" selected>3 subtasks</option>

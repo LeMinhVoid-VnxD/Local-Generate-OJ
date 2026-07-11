@@ -1512,6 +1512,94 @@ static Problem generate_problem_ai(const AIRequest& req, std::string& error) {
     return prob;
 }
 
+// ---------- Solution Help ----------
+
+static std::string build_solution_hint_prompt(const Problem& prob) {
+    std::string prompt =
+        "Bạn là người hướng dẫn lập trình. Dựa vào đề bài sau, hãy giải thích cách giải bài toán. "
+        "Trả về CHỈ DUY NHẤT JSON, không kèm markdown hay giải thích gì thêm.\n\n"
+        "Đề bài:\n"
+        "Tiêu đề: " + prob.title + "\n"
+        "Mô tả: " + prob.description + "\n"
+        "Định dạng đầu vào: " + prob.input_format + "\n"
+        "Định dạng đầu ra: " + prob.output_format + "\n"
+        "Ràng buộc: " + prob.constraints + "\n\n";
+
+    if (!prob.subtasks.empty()) {
+        prompt += "Subtasks:\n";
+        for (const auto& sub : prob.subtasks) {
+            prompt += "  Subtask " + std::to_string(sub.id) + " (" + std::to_string(sub.points) + " điểm): "
+                      + sub.constraints + "\n";
+        }
+    }
+
+    prompt += "\nVí dụ:\n";
+    for (const auto& s : prob.samples) {
+        prompt += "  Input: " + s.input + "\n  Output: " + s.expected + "\n";
+    }
+
+    prompt +=
+        "\nHãy trả về JSON theo định dạng:\n"
+        "{\n"
+        "  \"approach\": \"Giải thích thuật toán tổng quan, tư duy giải bài\",\n"
+        "  \"algorithm\": \"Tên thuật toán cụ thể cần dùng\",\n"
+        "  \"complexity\": \"Độ phức tạp thời gian và bộ nhớ\",\n"
+        "  \"steps\": [\"Bước 1\", \"Bước 2\", ...],\n"
+        "  \"key_insight\": \"Điểm mấu chốt để giải bài\"\n"
+        "}\n\n"
+        "Sử dụng $...$ cho công thức toán học. QUAN TRỌNG: Chỉ trả về JSON, không thêm gì khác.";
+    return prompt;
+}
+
+static std::string build_solution_code_prompt(const Problem& prob) {
+    std::string prompt =
+        "Bạn là lập trình viên C++ thi đấu. Dựa vào đề bài sau, hãy viết code C++ giải bài toán. "
+        "Code cần tối ưu, xử lý đúng mọi ràng buộc và subtask.\n"
+        "Trả về CHỈ DUY NHẤT JSON, không kèm markdown hay giải thích gì thêm.\n\n"
+        "Đề bài:\n"
+        "Tiêu đề: " + prob.title + "\n"
+        "Mô tả: " + prob.description + "\n"
+        "Định dạng đầu vào: " + prob.input_format + "\n"
+        "Định dạng đầu ra: " + prob.output_format + "\n"
+        "Ràng buộc: " + prob.constraints + "\n";
+
+    if (!prob.subtasks.empty()) {
+        prompt += "Subtasks:\n";
+        for (const auto& sub : prob.subtasks) {
+            prompt += "  Subtask " + std::to_string(sub.id) + " (" + std::to_string(sub.points) + " điểm): "
+                      + sub.constraints + "\n";
+        }
+    }
+
+    prompt += "\nVí dụ:\n";
+    for (const auto& s : prob.samples) {
+        prompt += "  Input: " + s.input + "\n  Output: " + s.expected + "\n";
+    }
+
+    prompt +=
+        "\nHãy trả về JSON theo định dạng:\n"
+        "{\n"
+        "  \"language\": \"C++\",\n"
+        "  \"std\": \"C++17\",\n"
+        "  \"code\": \"Code C++ hoàn chỉnh, dùng #include <bits/stdc++.h> và using namespace std;\",\n"
+        "  \"explanation\": \"Giải thích ngắn code hoạt động thế nào\",\n"
+        "  \"complexity\": \"Độ phức tạp\"\n"
+        "}\n\n"
+        "Sử dụng $...$ cho công thức toán học. QUAN TRỌNG: Chỉ trả về JSON, không thêm gì khác. "
+        "Code phải đọc từ stdin và in ra stdout.";
+    return prompt;
+}
+
+static std::string call_ai_provider(const std::string& provider, const std::string& api_key,
+                                     const std::string& model, const std::string& system_prompt,
+                                     const std::string& user_prompt) {
+    std::string m = model.empty() ? default_model_for(provider) : model;
+    if (provider == "claude") return call_claude(api_key, m, system_prompt, user_prompt);
+    if (provider == "gemini") return call_gemini(api_key, m, system_prompt, user_prompt);
+    if (provider == "deepseek") return call_deepseek(api_key, m, system_prompt, user_prompt);
+    return call_openai(api_key, m, system_prompt, user_prompt);
+}
+
 // ---------- HTTP Server ----------
 class HttpServer {
     SOCKET listen_socket;
@@ -1913,6 +2001,126 @@ class HttpServer {
             ok.set("test_count", JsonValue((double)prob.test_cases.size()));
             ok.set("subtask_count", JsonValue((double)prob.subtasks.size()));
             resp.body = ok.to_string();
+            return resp;
+        }
+
+        // POST /api/solution/hint
+        if (path == "/api/solution/hint" && req.method == "POST") {
+            JsonParser parser(req.body);
+            auto j = parser.parse();
+
+            std::string problem_id = j.get_string("problem_id");
+            std::string api_key = j.get_string("api_key", "");
+            std::string provider = j.get_string("provider", "openai");
+            std::string model = j.get_string("model", "");
+
+            if (api_key.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Vui lòng nhập API key."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (problem_id.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Thiếu problem_id."));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            const Problem* problem = problem_mgr.get(problem_id);
+            if (!problem) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Không tìm thấy bài tập."));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            std::string system_prompt = "Bạn là chuyên gia hướng dẫn lập trình thi đấu. Sử dụng $...$ cho công thức toán học.";
+            std::string user_prompt = build_solution_hint_prompt(*problem);
+            std::string raw = call_ai_provider(provider, api_key, model, system_prompt, user_prompt);
+
+            if (raw.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Không nhận được phản hồi từ AI."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (raw.find("__ERROR__:") == 0) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Lỗi AI: " + raw.substr(10)));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            // Try to extract JSON from response
+            std::string json_str = extract_json(raw);
+            if (!json_str.empty()) {
+                resp.body = json_str;
+            } else {
+                // Return raw text wrapped in JSON
+                JsonValue ok(JsonValue::Object);
+                ok.set("approach", JsonValue(raw));
+                resp.body = ok.to_string();
+            }
+            return resp;
+        }
+
+        // POST /api/solution/code
+        if (path == "/api/solution/code" && req.method == "POST") {
+            JsonParser parser(req.body);
+            auto j = parser.parse();
+
+            std::string problem_id = j.get_string("problem_id");
+            std::string api_key = j.get_string("api_key", "");
+            std::string provider = j.get_string("provider", "openai");
+            std::string model = j.get_string("model", "");
+
+            if (api_key.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Vui lòng nhập API key."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (problem_id.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Thiếu problem_id."));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            const Problem* problem = problem_mgr.get(problem_id);
+            if (!problem) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Không tìm thấy bài tập."));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            std::string system_prompt = "Bạn là lập trình viên C++ thi đấu chuyên nghiệp. Sử dụng $...$ cho công thức toán học.";
+            std::string user_prompt = build_solution_code_prompt(*problem);
+            std::string raw = call_ai_provider(provider, api_key, model, system_prompt, user_prompt);
+
+            if (raw.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Không nhận được phản hồi từ AI."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (raw.find("__ERROR__:") == 0) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Lỗi AI: " + raw.substr(10)));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            std::string json_str = extract_json(raw);
+            if (!json_str.empty()) {
+                resp.body = json_str;
+            } else {
+                JsonValue ok(JsonValue::Object);
+                ok.set("code", JsonValue(raw));
+                resp.body = ok.to_string();
+            }
             return resp;
         }
 

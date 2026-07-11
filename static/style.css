@@ -560,6 +560,92 @@ button {
   vertical-align: sub;
 }
 
+/* Solution Help Buttons */
+.solution-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-hint, .btn-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-hint:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+.btn-code:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #34d399;
+}
+.solution-result {
+  margin-top: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.solution-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
+.solution-result-header .btn-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+}
+.solution-result-header .btn-close:hover {
+  color: var(--danger);
+}
+.solution-result-body {
+  padding: 12px;
+  font-size: 0.9em;
+  line-height: 1.7;
+  max-height: 500px;
+  overflow-y: auto;
+}
+.solution-result-body ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.solution-result-body ol li {
+  margin-bottom: 4px;
+}
+.code-solution {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-primary);
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
 /* Subtask Items */
 .subtask-list {
   display: flex;
