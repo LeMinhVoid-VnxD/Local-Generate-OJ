@@ -166,23 +166,17 @@
               </div>
             </div>
 
-            <!-- Solution Help -->
-            <div class="statement-section">
-              <h3>Hỗ trợ giải bài</h3>
-              <div class="solution-buttons">
-                <button onclick="requestSolutionHint()" class="btn btn-hint">
-                  <i data-lucide="lightbulb"></i> Hướng dẫn giải
-                </button>
-                <button onclick="requestSolutionCode()" class="btn btn-code">
-                  <i data-lucide="code"></i> Code giải
-                </button>
-              </div>
-              <div id="solution-result" class="solution-result hidden">
-                <div class="solution-result-header">
-                  <span id="solution-result-title">Hướng dẫn giải</span>
-                  <button onclick="closeSolutionResult()" class="btn-close"><i data-lucide="x"></i></button>
+            <!-- AI Chat -->
+            <div class="statement-section chat-section">
+              <h3><i data-lucide="bot" style="width:16px;height:16px;vertical-align:middle;"></i> Hỏi đáp AI</h3>
+              <div class="chat-messages" id="chatMessages">
+                <div class="chat-msg chat-msg-ai">
+                  <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
                 </div>
-                <div id="solution-result-body" class="solution-result-body rich-text"></div>
+              </div>
+              <div class="chat-input-area">
+                <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
+                <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
               </div>
             </div>
           </div>
@@ -247,28 +241,6 @@
               <button onclick="showDetailedResultModal()" class="btn-detail-result">
                 Xem chi tiết các testcase <i data-lucide="arrow-right"></i>
               </button>
-            </div>
-
-            <!-- AI Chat -->
-            <div class="chat-panel" id="chatPanel">
-              <div class="chat-header" onclick="toggleChat()">
-                <div class="chat-header-left">
-                  <i data-lucide="bot" style="width:16px;height:16px;"></i>
-                  <span>Hỏi đáp AI</span>
-                </div>
-                <i data-lucide="chevron-down" class="chat-toggle-icon" id="chatToggleIcon" style="width:14px;height:14px;"></i>
-              </div>
-              <div class="chat-body" id="chatBody">
-                <div class="chat-messages" id="chatMessages">
-                  <div class="chat-msg chat-msg-ai">
-                    <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
-                  </div>
-                </div>
-                <div class="chat-input-area">
-                  <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
-                  <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
-                </div>
-              </div>
             </div>
           </div>
         </aside>

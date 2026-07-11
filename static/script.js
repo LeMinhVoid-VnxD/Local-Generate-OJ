@@ -332,6 +332,13 @@ async function viewProblemDetail(id) {
     drafts[currentProblem.id] = codeEditor.value;
     localStorage.setItem('oj_editor_drafts', JSON.stringify(drafts));
   };
+
+  // Clear old chat and auto-request hint
+  document.getElementById('chatMessages').innerHTML = '';
+  chatHistory = [];
+  setTimeout(function() {
+    sendChatMessage('Hãy hướng dẫn tôi giải bài này: thuật toán, cách tiếp cận, độ phức tạp.');
+  }, 300);
   
   lucide.createIcons();
 }
@@ -430,13 +437,6 @@ function closeSolutionResult() {
 // ---------- AI Chat ----------
 var chatHistory = [];
 
-function toggleChat() {
-  var body = document.getElementById('chatBody');
-  var icon = document.getElementById('chatToggleIcon');
-  body.classList.toggle('collapsed');
-  icon.classList.toggle('collapsed');
-}
-
 function addChatMessage(text, isUser) {
   var container = document.getElementById('chatMessages');
   var div = document.createElement('div');
@@ -444,33 +444,44 @@ function addChatMessage(text, isUser) {
   div.innerHTML = '<div class="chat-msg-content">' + formatRichText(text) + '</div>';
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
+  return div;
 }
 
-async function sendChatMessage() {
+function showThinking() {
+  var container = document.getElementById('chatMessages');
+  var div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-ai';
+  div.id = 'chatThinking';
+  div.innerHTML = '<div class="chat-msg-content"><div class="thinking-dots"><span></span><span></span><span></span></div></div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideThinking() {
+  var el = document.getElementById('chatThinking');
+  if (el) el.remove();
+}
+
+async function sendChatMessage(text) {
   var input = document.getElementById('chatInput');
-  var text = input.value.trim();
+  if (!text) text = input.value.trim();
   if (!text) return;
   input.value = '';
 
-  // Ensure chat body is expanded
-  var body = document.getElementById('chatBody');
-  var icon = document.getElementById('chatToggleIcon');
-  body.classList.remove('collapsed');
-  icon.classList.remove('collapsed');
-
   addChatMessage(text, true);
   chatHistory.push({ role: 'user', content: text });
+  showThinking();
 
   var btn = document.getElementById('chatSendBtn');
   btn.disabled = true;
 
-  // Read config
   var cfg = { aiKey: '', aiProvider: 'openai' };
   var raw = localStorage.getItem('oj_local_settings');
   if (raw) { try { cfg = JSON.parse(raw); } catch(e) {} }
   var apiKey = cfg.aiKey || '';
   var provider = cfg.aiProvider || 'openai';
   if (!apiKey) {
+    hideThinking();
     addChatMessage('Vui lòng nhập API key trong Settings > Cấu hình AI.', false);
     btn.disabled = false;
     return;
@@ -488,6 +499,7 @@ async function sendChatMessage() {
       })
     });
     var data = await resp.json();
+    hideThinking();
     if (data.error) {
       addChatMessage('Lỗi: ' + data.error, false);
     } else {
@@ -496,6 +508,7 @@ async function sendChatMessage() {
       chatHistory.push({ role: 'assistant', content: reply });
     }
   } catch (e) {
+    hideThinking();
     addChatMessage('Lỗi kết nối: ' + e.message, false);
   } finally {
     btn.disabled = false;
