@@ -519,11 +519,13 @@ async function sendChatMessage(text) {
 (function() {
   var handle = document.getElementById('chatDragHandle');
   var panel = document.getElementById('chatPanel');
+  var label = document.getElementById('chatSizeLabel');
   if (!handle || !panel) return;
   var startY, startHeight;
   function onMouseDown(e) {
     startY = e.clientY;
     startHeight = panel.offsetHeight;
+    handle.classList.add('dragging');
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
     document.body.style.cursor = 'ns-resize';
@@ -532,12 +534,14 @@ async function sendChatMessage(text) {
   }
   function onMouseMove(e) {
     var diff = e.clientY - startY;
-    var h = Math.max(150, startHeight - diff);
+    var h = Math.max(120, startHeight - diff);
     panel.style.height = h + 'px';
+    if (label) label.textContent = h + 'px';
   }
   function onMouseUp() {
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseup', onMouseUp);
+    handle.classList.remove('dragging');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   }
