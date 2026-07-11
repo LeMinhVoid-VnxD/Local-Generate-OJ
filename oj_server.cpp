@@ -2178,8 +2178,28 @@ class HttpServer {
                 problem = problem_mgr.get(problem_id);
             }
 
-            std::string system_prompt = build_chat_system_prompt(problem);
-            std::string raw = call_ai_provider(provider, api_key, "", system_prompt, message);
+            // Check cache
+            std::string raw;
+            {
+                std::string cache_key = problem_id.empty() ? "no_problem" : problem_id;
+                std::string msg_prefix = message.substr(0, std::min<size_t>(30, message.size()));
+                for (auto& c : msg_prefix) {
+                    if (!isalnum((unsigned char)c) && c != '_' && c != '-') c = '_';
+                }
+                std::string cache_path = "data\\cache\\" + cache_key + "_" + msg_prefix + ".json";
+                std::ifstream cf(cache_path);
+                if (cf) {
+                    std::stringstream ss; ss << cf.rdbuf();
+                    JsonParser cp(ss.str());
+                    auto cj = cp.parse();
+                    raw = cj.get_string("reply", "");
+                }
+            }
+
+            if (raw.empty()) {
+                std::string system_prompt = build_chat_system_prompt(problem);
+                raw = call_ai_provider(provider, api_key, "", system_prompt, message);
+            }
 
             if (raw.empty()) {
                 JsonValue err(JsonValue::Object);
@@ -2192,6 +2212,28 @@ class HttpServer {
                 err.set("error", JsonValue("Lỗi AI: " + raw.substr(10)));
                 resp.body = err.to_string();
                 return resp;
+            }
+
+            // Cache response to data/cache/
+            CreateDirectoryA("data", NULL);
+            CreateDirectoryA("data\\cache", NULL);
+            {
+                std::string cache_key = problem_id.empty() ? "no_problem" : problem_id;
+                // Use first 30 chars of message as cache identifier
+                std::string msg_prefix = message.substr(0, std::min<size_t>(30, message.size()));
+                // Replace non-filename chars
+                for (auto& c : msg_prefix) {
+                    if (!isalnum((unsigned char)c) && c != '_' && c != '-') c = '_';
+                }
+                std::string cache_path = "data\\cache\\" + cache_key + "_" + msg_prefix + ".json";
+
+                JsonValue cached(JsonValue::Object);
+                cached.set("problem_id", JsonValue(problem_id));
+                cached.set("message", JsonValue(message));
+                cached.set("reply", JsonValue(raw));
+                cached.set("time", JsonValue(std::to_string(std::time(nullptr))));
+                std::ofstream cf(cache_path);
+                if (cf) { cf << cached.to_string(); }
             }
 
             JsonValue ok(JsonValue::Object);
