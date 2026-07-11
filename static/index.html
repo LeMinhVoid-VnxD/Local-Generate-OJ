@@ -248,6 +248,28 @@
                 Xem chi tiết các testcase <i data-lucide="arrow-right"></i>
               </button>
             </div>
+
+            <!-- AI Chat -->
+            <div class="chat-panel" id="chatPanel">
+              <div class="chat-header" onclick="toggleChat()">
+                <div class="chat-header-left">
+                  <i data-lucide="bot" style="width:16px;height:16px;"></i>
+                  <span>Hỏi đáp AI</span>
+                </div>
+                <i data-lucide="chevron-down" class="chat-toggle-icon" id="chatToggleIcon" style="width:14px;height:14px;"></i>
+              </div>
+              <div class="chat-body" id="chatBody">
+                <div class="chat-messages" id="chatMessages">
+                  <div class="chat-msg chat-msg-ai">
+                    <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
+                  </div>
+                </div>
+                <div class="chat-input-area">
+                  <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
+                  <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
+                </div>
+              </div>
+            </div>
           </div>
         </aside>
       </div>

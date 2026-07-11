@@ -427,6 +427,81 @@ function closeSolutionResult() {
   document.getElementById('solution-result').classList.add('hidden');
 }
 
+// ---------- AI Chat ----------
+var chatHistory = [];
+
+function toggleChat() {
+  var body = document.getElementById('chatBody');
+  var icon = document.getElementById('chatToggleIcon');
+  body.classList.toggle('collapsed');
+  icon.classList.toggle('collapsed');
+}
+
+function addChatMessage(text, isUser) {
+  var container = document.getElementById('chatMessages');
+  var div = document.createElement('div');
+  div.className = 'chat-msg ' + (isUser ? 'chat-msg-user' : 'chat-msg-ai');
+  div.innerHTML = '<div class="chat-msg-content">' + formatRichText(text) + '</div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendChatMessage() {
+  var input = document.getElementById('chatInput');
+  var text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  // Ensure chat body is expanded
+  var body = document.getElementById('chatBody');
+  var icon = document.getElementById('chatToggleIcon');
+  body.classList.remove('collapsed');
+  icon.classList.remove('collapsed');
+
+  addChatMessage(text, true);
+  chatHistory.push({ role: 'user', content: text });
+
+  var btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+
+  // Read config
+  var cfg = { aiKey: '', aiProvider: 'openai' };
+  var raw = localStorage.getItem('oj_local_settings');
+  if (raw) { try { cfg = JSON.parse(raw); } catch(e) {} }
+  var apiKey = cfg.aiKey || '';
+  var provider = cfg.aiProvider || 'openai';
+  if (!apiKey) {
+    addChatMessage('Vui lòng nhập API key trong Settings > Cấu hình AI.', false);
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    var resp = await fetch(API_BASE + '/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        problem_id: currentProblem ? currentProblem.id : '',
+        message: text,
+        api_key: apiKey,
+        provider: provider
+      })
+    });
+    var data = await resp.json();
+    if (data.error) {
+      addChatMessage('Lỗi: ' + data.error, false);
+    } else {
+      var reply = data.reply || 'Không có phản hồi.';
+      addChatMessage(reply, false);
+      chatHistory.push({ role: 'assistant', content: reply });
+    }
+  } catch (e) {
+    addChatMessage('Lỗi kết nối: ' + e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function formatRichText(text) {
   if (!text) return '';
   // Shared math transformations (safe to apply on plain text, no HTML entities involved)

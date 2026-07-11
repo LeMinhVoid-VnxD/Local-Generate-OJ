@@ -1600,6 +1600,32 @@ static std::string call_ai_provider(const std::string& provider, const std::stri
     return call_openai(api_key, m, system_prompt, user_prompt);
 }
 
+static std::string build_chat_system_prompt(const Problem* problem) {
+    std::string prompt = "Bạn là trợ lý AI hỗ trợ giải bài tập lập trình. ";
+    if (problem) {
+        prompt += "Dưới đây là đề bài đang được hỏi:\n\n"
+                  "Tiêu đề: " + problem->title + "\n"
+                  "Mô tả: " + problem->description + "\n"
+                  "Định dạng đầu vào: " + problem->input_format + "\n"
+                  "Định dạng đầu ra: " + problem->output_format + "\n"
+                  "Ràng buộc: " + problem->constraints + "\n\n";
+        if (!problem->subtasks.empty()) {
+            prompt += "Subtasks:\n";
+            for (const auto& sub : problem->subtasks) {
+                prompt += "  Subtask " + std::to_string(sub.id) + " (" + std::to_string(sub.points) + " điểm): "
+                          + sub.constraints + "\n";
+            }
+        }
+        prompt += "\nVí dụ:\n";
+        for (const auto& s : problem->samples) {
+            prompt += "  Input: " + s.input + "\n  Output: " + s.expected + "\n";
+        }
+    }
+    prompt += "\nTrả lời câu hỏi của người dùng về bài tập này. Sử dụng $...$ cho công thức toán học. "
+              "Giải thích rõ ràng, dễ hiểu. Nếu được hỏi về code, hãy đưa ra code C++.";
+    return prompt;
+}
+
 // ---------- HTTP Server ----------
 class HttpServer {
     SOCKET listen_socket;
@@ -2121,6 +2147,56 @@ class HttpServer {
                 ok.set("code", JsonValue(raw));
                 resp.body = ok.to_string();
             }
+            return resp;
+        }
+
+        // POST /api/chat
+        if (path == "/api/chat" && req.method == "POST") {
+            JsonParser parser(req.body);
+            auto j = parser.parse();
+
+            std::string problem_id = j.get_string("problem_id", "");
+            std::string message = j.get_string("message", "");
+            std::string api_key = j.get_string("api_key", "");
+            std::string provider = j.get_string("provider", "openai");
+
+            if (api_key.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Vui lòng nhập API key."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (message.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Vui lòng nhập câu hỏi."));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            const Problem* problem = nullptr;
+            if (!problem_id.empty()) {
+                problem = problem_mgr.get(problem_id);
+            }
+
+            std::string system_prompt = build_chat_system_prompt(problem);
+            std::string raw = call_ai_provider(provider, api_key, "", system_prompt, message);
+
+            if (raw.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Không nhận được phản hồi từ AI."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (raw.find("__ERROR__:") == 0) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Lỗi AI: " + raw.substr(10)));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            JsonValue ok(JsonValue::Object);
+            ok.set("reply", JsonValue(raw));
+            resp.body = ok.to_string();
             return resp;
         }
 

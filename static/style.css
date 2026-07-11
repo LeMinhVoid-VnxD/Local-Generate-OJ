@@ -646,6 +646,118 @@ button {
   margin-bottom: 8px;
 }
 
+/* AI Chat Panel */
+.chat-panel {
+  margin-top: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-toggle-icon {
+  transition: transform 0.2s;
+}
+.chat-toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+.chat-body {
+  transition: max-height 0.3s;
+  max-height: 400px;
+  overflow: hidden;
+}
+.chat-body.collapsed {
+  max-height: 0;
+}
+.chat-messages {
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-msg {
+  display: flex;
+}
+.chat-msg-ai {
+  justify-content: flex-start;
+}
+.chat-msg-user {
+  justify-content: flex-end;
+}
+.chat-msg-content {
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.82em;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+.chat-msg-ai .chat-msg-content {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+.chat-msg-user .chat-msg-content {
+  background: var(--primary);
+  color: #fff;
+}
+.chat-msg-ai .chat-msg-content p {
+  margin: 2px 0;
+}
+.chat-input-area {
+  display: flex;
+  border-top: 1px solid var(--border-color);
+  align-items: stretch;
+}
+.chat-input-area textarea {
+  flex: 1;
+  border: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 8px;
+  font-size: 0.82em;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  min-height: 36px;
+}
+.chat-send-btn {
+  width: 36px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-send-btn:hover {
+  background: var(--primary-hover);
+}
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Subtask Items */
 .subtask-list {
   display: flex;
