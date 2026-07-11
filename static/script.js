@@ -439,6 +439,8 @@ function formatRichText(text) {
     s = s.replace(/\\neq/g, '≠').replace(/\\cdot/g, '·');
     s = s.replace(/\\times/g, '×').replace(/\\infty/g, '∞');
     s = s.replace(/\\sqrt\{([^}]+)\}/g, '√$1');
+    s = s.replace(/\\lfloor/g, '⌊').replace(/\\rfloor/g, '⌋');
+    s = s.replace(/\\lceil/g, '⌈').replace(/\\rceil/g, '⌉');
     s = s.replace(/[{}]/g, '');
     return s;
   }
