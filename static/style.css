@@ -471,7 +471,18 @@ button {
   display: grid;
   grid-template-columns: 1fr 420px;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* Statement column stretches so chat fills remaining height */
+.problem-detail-layout > article {
+  display: flex;
+  flex-direction: column;
+}
+.problem-detail-layout > article > .card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 @media (max-width: 1024px) {
@@ -646,24 +657,53 @@ button {
   margin-bottom: 8px;
 }
 
-/* AI Chat Section (inside submit column) */
-.chat-section-submit {
+/* AI Chat Section (left column, fills remaining height) */
+.chat-section-left {
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-top: 16px;
   min-height: 0;
+  position: relative;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
 }
-.chat-header-submit {
+.chat-drag-handle {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 5;
+}
+.chat-drag-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+.chat-drag-handle:hover::after {
+  opacity: 1;
+  background: var(--primary);
+}
+.chat-header-left-panel {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 0;
+  padding: 4px 0 8px;
   font-size: 0.85em;
   font-weight: 600;
   color: var(--text-secondary);
 }
-.chat-section-submit .chat-messages {
+.chat-section-left .chat-messages {
   flex: 1;
   min-height: 0;
   overflow-y: auto;

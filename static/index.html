@@ -186,6 +186,23 @@
               </div>
             </div>
 
+            <!-- AI Chat -->
+            <div class="chat-section-left" id="chatPanel">
+              <div class="chat-drag-handle" id="chatDragHandle"></div>
+              <div class="chat-header-left-panel">
+                <i data-lucide="bot" style="width:16px;height:16px;"></i>
+                <span>Hỏi đáp AI</span>
+              </div>
+              <div class="chat-messages" id="chatMessages">
+                <div class="chat-msg chat-msg-ai">
+                  <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
+                </div>
+              </div>
+              <div class="chat-input-area">
+                <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
+                <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
+              </div>
+            </div>
           </div>
         </article>
 
@@ -250,22 +267,6 @@
               </button>
             </div>
 
-            <!-- AI Chat -->
-            <div class="chat-section-submit">
-              <div class="chat-header-submit">
-                <i data-lucide="bot" style="width:16px;height:16px;"></i>
-                <span>Hỏi đáp AI</span>
-              </div>
-              <div class="chat-messages" id="chatMessages">
-                <div class="chat-msg chat-msg-ai">
-                  <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
-                </div>
-              </div>
-              <div class="chat-input-area">
-                <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
-                <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
-              </div>
-            </div>
           </div>
         </aside>
       </div>

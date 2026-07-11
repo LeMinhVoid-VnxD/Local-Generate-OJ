@@ -515,6 +515,35 @@ async function sendChatMessage(text) {
   }
 }
 
+// AI Chat drag resize
+(function() {
+  var handle = document.getElementById('chatDragHandle');
+  var panel = document.getElementById('chatPanel');
+  if (!handle || !panel) return;
+  var startY, startHeight;
+  function onMouseDown(e) {
+    startY = e.clientY;
+    startHeight = panel.offsetHeight;
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  }
+  function onMouseMove(e) {
+    var diff = e.clientY - startY;
+    var h = Math.max(150, startHeight - diff);
+    panel.style.height = h + 'px';
+  }
+  function onMouseUp() {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+  handle.addEventListener('mousedown', onMouseDown);
+})();
+
 function formatRichText(text) {
   if (!text) return '';
   // Shared math transformations (safe to apply on plain text, no HTML entities involved)
