@@ -6,6 +6,11 @@ let searchQuery = '';
 let lastJudgeResult = null;
 let openTestcaseIndex = null; // Track which testcase detail is expanded in modal
 
+// API base URL — change this when frontend is on GitHub Pages and backend runs locally
+// Empty string '' = same origin (normal mode)
+// 'http://localhost:8080' = local backend when frontend is on GitHub Pages
+let API_BASE = localStorage.getItem('api_base') || '';
+
 // DOM Content Loaded
 document.addEventListener('DOMContentLoaded', () => {
   initRouter();
@@ -48,7 +53,7 @@ function navigateTo(target, id = '') {
 // ==========================================================================
 async function fetchProblems() {
   try {
-    const resp = await fetch('/api/problems');
+    const resp = await fetch(API_BASE + '/api/problems');
     if (!resp.ok) throw new Error('Không thể lấy danh sách bài tập');
     problemsList = await resp.json();
     return problemsList;
@@ -61,7 +66,7 @@ async function fetchProblems() {
 
 async function fetchProblemDetail(id) {
   try {
-    const resp = await fetch(`/api/problem/${id}`);
+    const resp = await fetch(API_BASE + `/api/problem/${id}`);
     if (!resp.ok) throw new Error('Không thể tải chi tiết bài tập');
     return await resp.json();
   } catch (e) {
@@ -78,7 +83,7 @@ async function reloadProblems() {
   btn.disabled = true;
   
   try {
-    const resp = await fetch('/api/reload', { method: 'POST' });
+    const resp = await fetch(API_BASE + '/api/reload', { method: 'POST' });
     if (!resp.ok) throw new Error('Gửi yêu cầu đồng bộ thất bại');
     const data = await resp.json();
     
@@ -182,6 +187,7 @@ function renderProblemsTable() {
       <td class="problem-title-cell" onclick="navigateTo('problem', '${p.id}')">${p.title}</td>
       <td><span class="tag">${catName}</span></td>
       <td><span class="badge badge-${p.difficulty}">${p.difficulty}</span></td>
+      <td>${p.cf_rating ? `<span class="badge badge-rating">${p.cf_rating}</span>` : '-'}</td>
       <td>${subtaskCount > 0 ? `${subtaskCount} subtasks` : 'Không chia'}</td>
       <td>${p.test_count} tests</td>
     `;
@@ -242,6 +248,14 @@ async function viewProblemDetail(id) {
   const diffBadge = document.getElementById('prob-difficulty');
   diffBadge.textContent = currentProblem.difficulty;
   diffBadge.className = `meta-pill badge-${currentProblem.difficulty}`;
+
+  const ratingEl = document.getElementById('prob-cf-rating');
+  if (currentProblem.cf_rating) {
+    ratingEl.textContent = `Rating: ${currentProblem.cf_rating}`;
+    ratingEl.style.display = '';
+  } else {
+    ratingEl.style.display = 'none';
+  }
   
   const catNames = { 'dp': 'Quy hoạch động', 'binary_search': 'Chặt nhị phân', 'greedy': 'Tham lam', 'graph': 'Đồ thị', 'math': 'Toán học', 'string': 'Xử lý xâu', 'data_structure': 'Cấu trúc dữ liệu' };
   document.getElementById('prob-category').textContent = catNames[currentProblem.category] || currentProblem.category || 'Khác';
@@ -335,7 +349,17 @@ function fillOrHideSection(sectionId, elementId, value) {
 
 function formatRichText(text) {
   if (!text) return '';
-  // simple math formula replacements if any, and formatting linebreaks
+  // Escape HTML entities first
+  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Convert $...$ math notation to styled spans
+  text = text.replace(/\$([^$]+)\$/g, function(match, inner) {
+    // Convert ^ for superscript: x^y -> x<sup>y</sup>
+    inner = inner.replace(/\^(\w+|\{[^}]+\})/g, '<sup>$1</sup>');
+    // Convert _ for subscript: x_y -> x<sub>y</sub>
+    inner = inner.replace(/_(\w+|\{[^}]+\})/g, '<sub>$1</sub>');
+    return '<span class="math-inline">' + inner + '</span>';
+  });
+  // Then line breaks
   return text.replace(/\n/g, '<br>');
 }
 
@@ -381,13 +405,14 @@ async function handleCodeSubmit() {
   document.getElementById('quickSubtaskResults').innerHTML = '';
 
   try {
-    const resp = await fetch('/api/judge', {
+    const resp = await fetch(API_BASE + '/api/judge', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         problem_id: currentProblem.id,
         code: code,
-        language: 'cpp'
+        language: 'cpp',
+        compiler_path: (() => { try { const s = JSON.parse(localStorage.getItem('oj_local_settings') || '{}'); return s.compilerPath || ''; } catch(e) { return ''; } })()
       })
     });
     
@@ -644,7 +669,9 @@ function closeSettings() {
 function saveSettings() {
   const data = {
     editorSize: document.getElementById('settings-editor-size').value,
-    tabSize: document.getElementById('settings-tab-size').value
+    tabSize: document.getElementById('settings-tab-size').value,
+    compilerPath: document.getElementById('settings-compiler-path').value.trim(),
+    apiBase: document.getElementById('settings-api-url').value.trim()
   };
   localStorage.setItem('oj_local_settings', JSON.stringify(data));
 }
@@ -655,6 +682,8 @@ function loadSettings() {
     const s = JSON.parse(raw);
     document.getElementById('settings-editor-size').value = s.editorSize || '14px';
     document.getElementById('settings-tab-size').value = s.tabSize || '4';
+    document.getElementById('settings-compiler-path').value = s.compilerPath || '';
+    document.getElementById('settings-api-url').value = s.apiBase || '';
   }
   applySettings();
 }
@@ -662,10 +691,17 @@ function loadSettings() {
 function applySettings() {
   const size = document.getElementById('settings-editor-size').value;
   const tab = document.getElementById('settings-tab-size').value;
+  const compilerPath = document.getElementById('settings-compiler-path').value.trim();
+  const apiUrl = document.getElementById('settings-api-url').value.trim();
   
   const editor = document.getElementById('codeEditor');
   editor.style.fontSize = size;
   editor.style.tabSize = tab;
+  
+  // Update API_BASE and localStorage
+  const apiVal = apiUrl || '';
+  localStorage.setItem('api_base', apiVal);
+  API_BASE = apiVal;
   
   saveSettings();
 }
@@ -746,4 +782,207 @@ function setupEditorKeyboardShortcuts() {
       handleCodeSubmit();
     }
   });
+}
+
+// ==========================================================================
+// AI Problem Generation
+// ==========================================================================
+
+const GEN_CATEGORIES = {
+  'toan': {
+    name: 'Toán học',
+    subTypes: ['Số học cơ bản', 'Số nguyên tố', 'GCD/LCM', 'Tổ hợp', 'Số học modulo', 'Dãy số', 'Phương trình']
+  },
+  'chat_nhi_phan': {
+    name: 'Chặt nhị phân',
+    subTypes: ['Tìm kiếm cơ bản', 'Căn bậc hai', 'Tìm kiếm trên mảng', 'Chặt nhị phân đáp án', 'Ternary search']
+  },
+  'dp': {
+    name: 'Quy hoạch động',
+    subTypes: ['DP cơ bản', 'DP dãy con (LIS/LCS)', 'DP số (Digit DP)', 'DP on tree', 'DP thứ tự từ điển', 'DP + CTDL', 'DP xác suất', 'DP cửa sổ']
+  },
+  'tham_lam': {
+    name: 'Tham lam',
+    subTypes: ['Sắp xếp', 'Hoán vị', 'Tối ưu']
+  },
+  'do_thi': {
+    name: 'Đồ thị',
+    subTypes: ['BFS/DFS', 'Dijkstra', 'Floyd-Warshall', 'Bellman-Ford', 'Kruskal/Prim (MST)', 'Topological sort', 'Euler path', 'Flow']
+  },
+  'cau_truc_du_lieu': {
+    name: 'Cấu trúc dữ liệu',
+    subTypes: ['Stack/Queue', 'Segment Tree', 'Fenwick Tree (BIT)', 'DSU', 'Trie', 'Heap/Priority Queue']
+  },
+  'xau_ky_tu': {
+    name: 'Xử lý xâu',
+    subTypes: ['Xâu đối xứng', 'Tìm kiếm xâu (KMP)', 'Z-algorithm', 'Hash']
+  },
+  'khac': {
+    name: 'Khác',
+    subTypes: ['Two pointers', 'Sliding window', 'Prefix sum', 'Sorting', 'Simulation']
+  }
+};
+
+const GEN_MODELS = {
+  'openai': [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
+  ],
+  'claude': [
+    { value: 'claude-opus-4-8', label: 'Opus 4.8' },
+    { value: 'claude-fable-5', label: 'Fable 5' },
+    { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
+  ],
+  'gemini': [
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' }
+  ],
+  'deepseek': [
+    { value: 'deepseek-chat', label: 'DeepSeek Chat' },
+    { value: 'deepseek-coder', label: 'DeepSeek Coder' }
+  ]
+};
+
+function openGenerateModal() {
+  document.getElementById('modal-generate').classList.remove('hidden');
+  document.getElementById('gen-result-area').classList.add('hidden');
+  document.getElementById('gen-result-loading').classList.add('hidden');
+  document.getElementById('gen-result-success').classList.add('hidden');
+  document.getElementById('gen-result-error').classList.add('hidden');
+  document.getElementById('btnGenSubmit').disabled = false;
+  document.getElementById('btnGenSubmit').innerHTML = '<i data-lucide="wand-2"></i> Sinh đề';
+  onProviderChange();
+  lucide.createIcons();
+}
+
+function closeGenerateModal() {
+  document.getElementById('modal-generate').classList.add('hidden');
+}
+
+function onProviderChange() {
+  const provider = document.getElementById('gen-provider').value;
+  const input = document.getElementById('gen-api-key');
+  const modelSelect = document.getElementById('gen-model');
+  
+  // Update placeholder
+  if (provider === 'openai') input.placeholder = 'sk-...';
+  else if (provider === 'claude') input.placeholder = 'sk-ant-...';
+  else if (provider === 'gemini') input.placeholder = 'AIzaSy...';
+  else if (provider === 'deepseek') input.placeholder = 'sk-...';
+  
+  // Update model dropdown
+  modelSelect.innerHTML = '';
+  const models = GEN_MODELS[provider] || [];
+  models.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.value;
+    opt.textContent = m.label;
+    modelSelect.appendChild(opt);
+  });
+}
+
+function updateGenSubTypes() {
+  const cat = document.getElementById('gen-category').value;
+  const subSelect = document.getElementById('gen-sub-type');
+  subSelect.innerHTML = '';
+  if (!cat || !GEN_CATEGORIES[cat]) {
+    subSelect.innerHTML = '<option value="">-- Chọn thể loại trước --</option>';
+    return;
+  }
+  const types = GEN_CATEGORIES[cat].subTypes;
+  types.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = t;
+    subSelect.appendChild(opt);
+  });
+}
+
+async function handleGenerateProblem() {
+  const provider = document.getElementById('gen-provider').value;
+  const apiKey = document.getElementById('gen-api-key').value.trim();
+  const category = document.getElementById('gen-category').value;
+  const subType = document.getElementById('gen-sub-type').value;
+  const subtaskCount = parseInt(document.getElementById('gen-subtask-count').value);
+
+  if (!apiKey) {
+    showToast('Vui lòng nhập API key!', 'error');
+    return;
+  }
+  if (!category) {
+    showToast('Vui lòng chọn thể loại!', 'error');
+    return;
+  }
+  if (!subType) {
+    showToast('Vui lòng chọn dạng bài!', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnGenSubmit');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader" class="spinning"></i> Đang sinh...';
+
+  const resultArea = document.getElementById('gen-result-area');
+  resultArea.classList.remove('hidden');
+  document.getElementById('gen-result-loading').classList.remove('hidden');
+  document.getElementById('gen-result-success').classList.add('hidden');
+  document.getElementById('gen-result-error').classList.add('hidden');
+  lucide.createIcons();
+
+  const model = document.getElementById('gen-model').value;
+  const rating = document.getElementById('gen-rating').value;
+
+  try {
+    const resp = await fetch(API_BASE + '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: provider,
+        model: model,
+        api_key: apiKey,
+        category: category,
+        sub_type: subType,
+        subtask_count: subtaskCount,
+        rating: rating
+      })
+    });
+
+    const data = await resp.json();
+
+    document.getElementById('gen-result-loading').classList.add('hidden');
+
+    if (data.error) {
+      document.getElementById('gen-result-error').classList.remove('hidden');
+      document.getElementById('gen-result-error-text').textContent = data.error;
+      showToast('Sinh đề thất bại: ' + data.error, 'error');
+    } else {
+      document.getElementById('gen-result-success').classList.remove('hidden');
+      document.getElementById('gen-result-title').innerHTML = '<strong>Bài tập:</strong> ' + data.title;
+      document.getElementById('gen-result-meta').textContent =
+        'ID: ' + data.problem_id + ' | ' + data.test_count + ' test cases | ' + data.subtask_count + ' subtasks';
+      document.getElementById('gen-result-link').setAttribute('data-id', data.problem_id);
+      showToast('Sinh đề thành công: ' + data.title, 'success');
+    }
+  } catch (e) {
+    document.getElementById('gen-result-loading').classList.add('hidden');
+    document.getElementById('gen-result-error').classList.remove('hidden');
+    document.getElementById('gen-result-error-text').textContent = e.message;
+    showToast('Lỗi kết nối: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="wand-2"></i> Sinh đề';
+    lucide.createIcons();
+  }
+}
+
+function openGeneratedProblem(event) {
+  event.preventDefault();
+  const id = event.currentTarget.getAttribute('data-id');
+  if (id) {
+    closeGenerateModal();
+    navigateTo('problem', id);
+  }
 }

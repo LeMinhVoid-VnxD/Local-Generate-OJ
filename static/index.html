@@ -30,10 +30,16 @@
         <a href="#/problems" class="nav-link active" id="nav-problems">
           <i data-lucide="code-2"></i> Bài tập
         </a>
+        <a href="#/contests" class="nav-link" id="nav-contests">
+          <i data-lucide="award"></i> Luyện đề
+        </a>
       </nav>
       <div class="nav-actions">
         <button onclick="reloadProblems()" class="btn-reload" title="Tải lại danh sách từ ổ đĩa">
           <i data-lucide="rotate-cw" id="reload-icon"></i> Đồng bộ
+        </button>
+        <button onclick="openGenerateModal()" class="btn-generate" title="Tạo đề bằng AI">
+          <i data-lucide="wand-2"></i> Tạo đề
         </button>
         <button onclick="openSettings()" class="btn-settings" title="Cài đặt">
           <i data-lucide="settings"></i> Cài đặt
@@ -82,6 +88,7 @@
               <th>Tên bài tập</th>
               <th style="width: 180px;">Chủ đề</th>
               <th style="width: 120px;">Độ khó</th>
+              <th style="width: 90px;">Rating</th>
               <th style="width: 120px;">Subtasks</th>
               <th style="width: 120px;">Số testcase</th>
             </tr>
@@ -115,6 +122,7 @@
             
             <div class="meta-pills">
               <span class="meta-pill" id="prob-difficulty">Medium</span>
+              <span class="meta-pill" id="prob-cf-rating" style="display:none">Rating: -</span>
               <span class="meta-pill" id="prob-category">DP</span>
               <span class="meta-pill"><i data-lucide="clock"></i> Giới hạn thời gian: <span id="prob-time-limit">1.0s</span></span>
               <span class="meta-pill"><i data-lucide="cpu"></i> Bộ nhớ: <span id="prob-memory-limit">256MB</span></span>
@@ -224,6 +232,169 @@
         </aside>
       </div>
     </section>
+
+    <!-- view 3: Contests List -->
+    <section id="view-contests" class="view hidden">
+      <div class="section-header">
+        <div class="header-title-area">
+          <h2>Danh sách đề thi HSG</h2>
+          <p class="subtitle">Thử sức với các bộ đề thi thử theo đúng định dạng học sinh giỏi</p>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="problems-table">
+          <thead>
+            <tr>
+              <th>Đề thi</th>
+              <th style="width: 120px;">Số bài</th>
+              <th style="width: 150px;">Thời gian làm bài</th>
+              <th style="width: 150px;">Thang điểm</th>
+              <th style="width: 150px; text-align: center;">Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="contestsTableBody">
+            <tr class="skeleton-row"><td colspan="5"><div class="skeleton"></div></td></tr>
+          </tbody>
+        </table>
+        <div id="noContestsMessage" class="no-data hidden">
+          <i data-lucide="award"></i>
+          <p>Không tìm thấy đề thi nào.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- view 4: Contest Detail (Exam Mode) -->
+    <section id="view-contest-detail" class="view hidden">
+      <!-- Contest Control Banner -->
+      <div class="contest-banner">
+        <div class="contest-info-left">
+          <h2 id="contest-title">Đề thi HSG...</h2>
+          <div class="contest-pills">
+            <span class="meta-pill"><i data-lucide="clock"></i> Thời gian: <span id="contest-time-limit">150 phút</span></span>
+            <span class="meta-pill"><i data-lucide="award"></i> Thang điểm: <span id="contest-max-score">20 điểm</span></span>
+            <span class="meta-pill" id="contest-status-pill"><i data-lucide="play-circle"></i> Trạng thái: Chưa bắt đầu</span>
+          </div>
+        </div>
+        <div class="contest-info-right">
+          <div class="contest-timer-box" id="contestTimerBox">
+            <span class="timer-label">Thời gian còn lại</span>
+            <span class="timer-value" id="contestTimer">--:--:--</span>
+          </div>
+          <button id="btnContestAction" onclick="handleContestAction()" class="btn-primary" style="padding: 10px 20px;">
+            <i data-lucide="play"></i> Bắt đầu làm bài
+          </button>
+        </div>
+      </div>
+
+      <!-- Contest Scoreboard summary bar -->
+      <div class="contest-scoreboard-bar hidden" id="contestScoreboardBar">
+        <div class="scoreboard-title">Bảng điểm hiện tại:</div>
+        <div class="scoreboard-items" id="contestScoreboardItems">
+          <!-- Rendered dynamically e.g. Bài 1: 5/5 | Bài 2: 0/7 -->
+        </div>
+        <div class="scoreboard-total">Tổng điểm: <span id="contestTotalScore">0</span> / <span id="contestTotalMaxScore">20</span></div>
+      </div>
+
+      <div class="problem-detail-layout hidden" id="contestMainLayout">
+        <!-- Left: Problem navigation tabs + Statement -->
+        <article class="statement-column">
+          <div class="card statement-card" style="padding-top: 16px;">
+            <div class="contest-problem-tabs" id="contestProblemTabs">
+              <!-- Tabs: Bài 1, Bài 2, Bài 3 -->
+            </div>
+            
+            <h1 id="contest-prob-title" class="prob-title" style="margin-top: 16px;">Tên bài...</h1>
+            <div class="meta-pills">
+              <span class="meta-pill" id="contest-prob-difficulty">Medium</span>
+              <span class="meta-pill" id="contest-prob-cf-rating" style="display:none">Rating: -</span>
+              <span class="meta-pill"><i data-lucide="clock"></i> Giới hạn: <span id="contest-prob-time-limit">1.0s</span></span>
+              <span class="meta-pill"><i data-lucide="cpu"></i> Bộ nhớ: <span id="contest-prob-memory-limit">256MB</span></span>
+              <span class="meta-pill" id="contest-prob-points-pill" style="border-color: var(--warning-border); background-color: var(--warning-bg); color: var(--warning); font-weight: 600;">Điểm tối đa: 5đ</span>
+            </div>
+            <div class="divider"></div>
+
+            <div class="statement-section">
+              <h3>Mô tả bài toán</h3>
+              <div id="contest-prob-description" class="rich-text"></div>
+            </div>
+            <div class="statement-section" id="contest-section-input-format">
+              <h3>Định dạng đầu vào</h3>
+              <div id="contest-prob-input-format" class="rich-text"></div>
+            </div>
+            <div class="statement-section" id="contest-section-output-format">
+              <h3>Định dạng đầu ra</h3>
+              <div id="contest-prob-output-format" class="rich-text"></div>
+            </div>
+            <div class="statement-section" id="contest-section-constraints">
+              <h3>Ràng buộc</h3>
+              <div id="contest-prob-constraints" class="rich-text"></div>
+            </div>
+            <div class="statement-section" id="contest-section-subtasks">
+              <h3>Subtasks</h3>
+              <div class="subtask-list" id="contest-prob-subtasks"></div>
+            </div>
+            <div class="statement-section" id="contest-section-samples">
+              <h3>Ví dụ minh hoạ</h3>
+              <div id="contest-prob-samples"></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Right: Code Editor & Submissions -->
+        <aside class="submit-column">
+          <div class="card submit-card sticky-panel">
+            <div class="panel-header">
+              <h2>Nộp bài giải</h2>
+            </div>
+            <div class="form-group">
+              <label for="contestLanguageSelect">Ngôn ngữ dịch</label>
+              <select id="contestLanguageSelect" class="form-control">
+                <option value="cpp">C++17 (g++ -O2)</option>
+              </select>
+            </div>
+            <div class="form-group editor-group">
+              <div class="editor-header">
+                <label>Mã nguồn</label>
+                <div class="editor-actions">
+                  <button class="editor-action-btn" onclick="clearContestEditor()" title="Xoá sạch">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                  <button class="editor-action-btn" onclick="copyFromClipboardContest()" title="Dán từ Clipboard">
+                    <i data-lucide="clipboard"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="editor-wrapper">
+                <textarea id="contestCodeEditor" placeholder="// Nhập code C++ của bạn ở đây..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+              </div>
+            </div>
+            <button onclick="handleContestCodeSubmit()" class="btn-submit-code" id="btnContestSubmit">
+              <i data-lucide="send"></i> Nộp bài (Ctrl+Enter)
+            </button>
+
+            <!-- Contest judge results -->
+            <div id="contestQuickResultBox" class="quick-result-box hidden">
+              <div class="quick-result-header">
+                <span class="result-title">Kết quả chấm điểm</span>
+                <span id="contestQuickVerdict" class="verdict-text WA">Wrong Answer</span>
+              </div>
+              <div class="score-display-area">
+                <span class="score-label">Điểm bài này:</span>
+                <span class="score-value" id="contestQuickScore">0.0 / 0.0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="contestQuickScoreProgress" style="width: 0%;"></div>
+              </div>
+              <div class="subtask-results-mini" id="contestQuickSubtaskResults"></div>
+              <button onclick="showDetailedResultModal()" class="btn-detail-result">
+                Xem chi tiết các testcase <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
   </main>
 
   <!-- Modal 1: Settings -->
@@ -252,6 +423,16 @@
             <option value="8">8 spaces</option>
           </select>
         </div>
+        <div class="form-group">
+          <label for="settings-compiler-path">Đường dẫn trình biên dịch g++</label>
+          <input type="text" id="settings-compiler-path" class="form-control" placeholder="g++" onchange="applySettings()">
+          <span style="font-size:0.8em;color:var(--text-muted);">Mặc định "g++". VD: "C:\MinGW\bin\g++.exe" hoặc "C:\Program Files\CodeBlocks\MinGW\bin\g++.exe"</span>
+        </div>
+        <div class="form-group">
+          <label for="settings-api-url">API Backend URL</label>
+          <input type="text" id="settings-api-url" class="form-control" placeholder="http://localhost:8080" onchange="applySettings()">
+          <span style="font-size:0.8em;color:var(--text-muted);">Để trống nếu chạy local. Điền URL khi frontend trên GitHub Pages.</span>
+        </div>
         <p class="settings-info-text">
           <i data-lucide="info" style="width: 14px; height: 14px; display: inline; vertical-align: middle; margin-right: 4px;"></i>
           Local OJ sử dụng trình biên dịch g++ từ MSYS2 được cấu hình sẵn trên máy của bạn.
@@ -263,7 +444,123 @@
     </div>
   </div>
 
-  <!-- Modal 2: Detailed Judge Results -->
+  <!-- Modal 2: AI Generate -->
+  <div id="modal-generate" class="modal-overlay hidden" onclick="if(event.target===this)closeGenerateModal()">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <div>
+          <h2>Tạo đề bằng AI</h2>
+          <p class="modal-subtitle">Nhập API key và chọn thông số để AI sinh bài tập tự động</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeGenerateModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="generate-form-grid">
+          <!-- API Provider -->
+          <div class="form-group">
+            <label for="gen-provider">Nhà cung cấp AI</label>
+            <select id="gen-provider" class="form-control" onchange="onProviderChange()">
+              <option value="openai">OpenAI (GPT)</option>
+              <option value="claude">Claude (Anthropic)</option>
+              <option value="gemini">Gemini (Google)</option>
+              <option value="deepseek">DeepSeek</option>
+            </select>
+          </div>
+          <!-- Model -->
+          <div class="form-group">
+            <label for="gen-model">Model</label>
+            <select id="gen-model" class="form-control"></select>
+          </div>
+          <!-- API Key -->
+          <div class="form-group">
+            <label for="gen-api-key">API Key</label>
+            <input type="password" id="gen-api-key" class="form-control" placeholder="sk-..." autocomplete="off">
+          </div>
+          <!-- Category -->
+          <div class="form-group">
+            <label for="gen-category">Thể loại</label>
+            <select id="gen-category" class="form-control" onchange="updateGenSubTypes()">
+              <option value="">-- Chọn thể loại --</option>
+              <option value="toan">Toán học</option>
+              <option value="chat_nhi_phan">Chặt nhị phân</option>
+              <option value="dp">Quy hoạch động (DP)</option>
+              <option value="tham_lam">Tham lam</option>
+              <option value="do_thi">Đồ thị</option>
+              <option value="cau_truc_du_lieu">Cấu trúc dữ liệu</option>
+              <option value="xau_ky_tu">Xử lý xâu</option>
+              <option value="khac">Khác</option>
+            </select>
+          </div>
+          <!-- Sub-type -->
+          <div class="form-group">
+            <label for="gen-sub-type">Dạng cụ thể</label>
+            <select id="gen-sub-type" class="form-control">
+              <option value="">-- Chọn thể loại trước --</option>
+            </select>
+          </div>
+          <!-- Rating range -->
+          <div class="form-group">
+            <label for="gen-rating">Độ khó (CF Rating)</label>
+            <select id="gen-rating" class="form-control">
+              <option value="">-- Mặc định (AI tự chọn) --</option>
+              <option value="easy">Easy (&lt; 1000)</option>
+              <option value="medium">Medium (1000-1499)</option>
+              <option value="hard">Hard (1500-1999)</option>
+              <option value="hardcore">Hardcore (2000-2499)</option>
+              <option value="ioi">IOI-ICPC (2500-3000)</option>
+              <option value="only-ai">Only AI (&gt; 3000)</option>
+            </select>
+          </div>
+          <!-- Subtask count -->
+          <div class="form-group">
+            <label for="gen-subtask-count">Số subtask</label>
+            <select id="gen-subtask-count" class="form-control">
+              <option value="1">1 subtask</option>
+              <option value="2">2 subtasks</option>
+              <option value="3" selected>3 subtasks</option>
+              <option value="4">4 subtasks</option>
+              <option value="5">5 subtasks</option>
+            </select>
+          </div>
+          <!-- Generate button -->
+          <div class="form-group" style="display: flex; align-items: flex-end;">
+            <button onclick="handleGenerateProblem()" class="btn-generate-submit" id="btnGenSubmit">
+              <i data-lucide="wand-2"></i> Sinh đề
+            </button>
+          </div>
+        </div>
+
+        <!-- Result area -->
+        <div id="gen-result-area" class="hidden" style="margin-top: 20px; padding: 16px; border-radius: 8px; background: var(--bg-secondary);">
+          <div id="gen-result-loading" class="hidden" style="text-align: center; padding: 20px;">
+            <i data-lucide="loader" class="spinning" style="width: 32px; height: 32px;"></i>
+            <p style="margin-top: 8px; color: var(--text-secondary);">Đang sinh đề... Vui lòng đợi (30-60 giây)</p>
+          </div>
+          <div id="gen-result-success" class="hidden">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--success); margin-bottom: 8px;">
+              <i data-lucide="check-circle-2"></i>
+              <strong>Sinh đề thành công!</strong>
+            </div>
+            <p id="gen-result-title" style="margin: 4px 0;"></p>
+            <p id="gen-result-meta" style="margin: 4px 0; font-size: 0.9em; color: var(--text-secondary);"></p>
+            <a id="gen-result-link" href="#" style="display: inline-block; margin-top: 8px;" onclick="openGeneratedProblem(event)">Xem bài tập mới →</a>
+          </div>
+          <div id="gen-result-error" class="hidden">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--danger); margin-bottom: 8px;">
+              <i data-lucide="alert-triangle"></i>
+              <strong>Lỗi!</strong>
+            </div>
+            <p id="gen-result-error-text" style="margin: 0; color: var(--text-secondary);"></p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="closeGenerateModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Detailed Judge Results -->
   <div id="modal-results" class="modal-overlay hidden">
     <div class="modal-card modal-large">
       <div class="modal-header">

@@ -22,6 +22,8 @@
 #include <random>
 
 #pragma comment(lib, "ws2_32.lib")
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
 
 namespace fs = std::filesystem;
 
@@ -123,6 +125,7 @@ public:
 
     JsonValue() : type(Null) {}
     JsonValue(const std::string& s) : type(String), str_val(s) {}
+    JsonValue(const char* s) : type(String), str_val(s) {}
     JsonValue(double n) : type(Number), num_val(n) {}
     JsonValue(bool b) : type(Bool), bool_val(b) {}
     JsonValue(Type t) : type(t) {}
@@ -349,11 +352,21 @@ struct Problem {
     std::string output_format;
     std::string constraints;
     std::string difficulty;
+    int cf_rating = 800;
     double time_limit = 1.0;
     int memory_limit = 256;
     std::vector<TestCase> test_cases;
     std::vector<Sample> samples;
     std::vector<Subtask> subtasks;
+
+    static std::string rating_to_label(int r) {
+        if (r < 1000) return "Easy";
+        if (r < 1500) return "Medium";
+        if (r < 2000) return "Hard";
+        if (r < 2500) return "Hardcore";
+        if (r < 3000) return "IOI-ICPC";
+        return "Only AI";
+    }
 
     JsonValue to_json() const {
         JsonValue j(JsonValue::Object);
@@ -365,6 +378,7 @@ struct Problem {
         j.set("output_format", JsonValue(output_format));
         j.set("constraints", JsonValue(constraints));
         j.set("difficulty", JsonValue(difficulty));
+        j.set("cf_rating", JsonValue((double)cf_rating));
         j.set("time_limit", JsonValue(time_limit));
         j.set("memory_limit", JsonValue((double)memory_limit));
         
@@ -410,6 +424,7 @@ struct Problem {
         p.output_format = j.get_string("output_format");
         p.constraints = j.get_string("constraints");
         p.difficulty = j.get_string("difficulty", "medium");
+        p.cf_rating = j.get_int("cf_rating", 800);
         p.time_limit = j.get_number("time_limit", 1.0);
         p.memory_limit = j.get_int("memory_limit", 256);
 
@@ -446,6 +461,108 @@ struct Problem {
             }
         }
         return p;
+    }
+};
+
+struct ContestProblem {
+    std::string problem_id;
+    int points = 0;
+};
+
+struct Contest {
+    std::string id;
+    std::string title;
+    std::string description;
+    int time_limit_minutes = 180;
+    int total_points = 20;
+    std::vector<ContestProblem> problems;
+
+    JsonValue to_json() const {
+        JsonValue j(JsonValue::Object);
+        j.set("id", JsonValue(id));
+        j.set("title", JsonValue(title));
+        j.set("description", JsonValue(description));
+        j.set("time_limit_minutes", JsonValue((double)time_limit_minutes));
+        j.set("total_points", JsonValue((double)total_points));
+        
+        JsonValue probs_arr(JsonValue::Array);
+        for (const auto& p : problems) {
+            JsonValue pj(JsonValue::Object);
+            pj.set("id", JsonValue(p.problem_id));
+            pj.set("points", JsonValue((double)p.points));
+            probs_arr.push(pj);
+        }
+        j.set("problems", probs_arr);
+        return j;
+    }
+
+    static Contest from_json(const std::string& id, const JsonValue& j) {
+        Contest c;
+        c.id = id;
+        c.title = j.get_string("title");
+        c.description = j.get_string("description");
+        c.time_limit_minutes = j.get_int("time_limit_minutes", 180);
+        c.total_points = j.get_int("total_points", 20);
+
+        auto* probs = j.get("problems");
+        if (probs && probs->type == JsonValue::Array) {
+            for (const auto& pj : probs->arr_val) {
+                ContestProblem cp;
+                cp.problem_id = pj.get_string("id");
+                cp.points = pj.get_int("points");
+                c.problems.push_back(cp);
+            }
+        }
+        return c;
+    }
+};
+
+class ContestManager {
+    std::map<std::string, Contest> contests;
+    std::string data_dir;
+    mutable std::mutex mtx;
+
+public:
+    ContestManager(const std::string& dir) : data_dir(dir) {
+        fs::create_directories(dir);
+        load_all();
+    }
+
+    void load_all() {
+        std::lock_guard<std::mutex> lock(mtx);
+        contests.clear();
+        if (!fs::exists(data_dir)) return;
+        for (const auto& entry : fs::directory_iterator(data_dir)) {
+            if (entry.path().extension() == ".json") {
+                auto content = read_file(entry.path().string());
+                if (content.empty()) continue;
+                JsonParser parser(content);
+                auto j = parser.parse();
+                if (j.type != JsonValue::Object) continue;
+                std::string id = entry.path().stem().string();
+                contests[id] = Contest::from_json(id, j);
+            }
+        }
+    }
+
+    std::vector<Contest> list() const {
+        std::lock_guard<std::mutex> lock(mtx);
+        std::vector<Contest> result;
+        for (const auto& [_, c] : contests) result.push_back(c);
+        return result;
+    }
+
+    const Contest* get(const std::string& id) const {
+        std::lock_guard<std::mutex> lock(mtx);
+        auto it = contests.find(id);
+        return (it != contests.end()) ? &it->second : nullptr;
+    }
+
+    void save(const Contest& c) {
+        std::lock_guard<std::mutex> lock(mtx);
+        contests[c.id] = c;
+        std::string path = data_dir + "/" + c.id + ".json";
+        write_file(path, c.to_json().to_string());
     }
 };
 
@@ -561,11 +678,12 @@ std::string exec_cmd_with_input(const std::string& cmd, const std::string& input
     error_msg = "";
     elapsed_sec = 0;
 
+    const DWORD PIPE_BUF = 4 * 1024 * 1024; // 4MB pipe buffer
     HANDLE hStdInRd, hStdInWr, hStdOutRd, hStdOutWr;
     SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
 
-    if (!CreatePipe(&hStdInRd, &hStdInWr, &sa, 0)) { error_msg = "CreatePipe failed"; return ""; }
-    if (!CreatePipe(&hStdOutRd, &hStdOutWr, &sa, 0)) { CloseHandle(hStdInRd); CloseHandle(hStdInWr); error_msg = "CreatePipe failed"; return ""; }
+    if (!CreatePipe(&hStdInRd, &hStdInWr, &sa, PIPE_BUF)) { error_msg = "CreatePipe failed"; return ""; }
+    if (!CreatePipe(&hStdOutRd, &hStdOutWr, &sa, PIPE_BUF)) { CloseHandle(hStdInRd); CloseHandle(hStdInWr); error_msg = "CreatePipe failed"; return ""; }
 
     SetHandleInformation(hStdInWr, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(hStdOutRd, HANDLE_FLAG_INHERIT, 0);
@@ -591,10 +709,22 @@ std::string exec_cmd_with_input(const std::string& cmd, const std::string& input
         return "";
     }
 
-    // Write input
-    DWORD written;
-    WriteFile(hStdInWr, input.c_str(), (DWORD)input.size(), &written, NULL);
-    CloseHandle(hStdInWr);
+    // Write input in a separate thread to prevent pipe deadlock
+    HANDLE hStdInWrCopy = hStdInWr;
+    std::thread writer([hStdInWrCopy, &input]() {
+        const char* data = input.c_str();
+        DWORD remaining = (DWORD)input.size();
+        DWORD offset = 0;
+        while (remaining > 0) {
+            DWORD to_write = (remaining > 65536) ? 65536 : remaining;
+            DWORD written = 0;
+            if (!WriteFile(hStdInWrCopy, data + offset, to_write, &written, NULL)) break;
+            offset += written;
+            remaining -= written;
+        }
+        CloseHandle(hStdInWrCopy);
+    });
+    writer.detach();
 
     // Read output with timeout
     char buf[65536];
@@ -617,12 +747,13 @@ std::string exec_cmd_with_input(const std::string& cmd, const std::string& input
 
     elapsed_sec = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start).count();
 
-    WaitForSingleObject(pi.hProcess, 100);
+    WaitForSingleObject(pi.hProcess, 500);
     DWORD exit_code = 0;
     GetExitCodeProcess(pi.hProcess, &exit_code);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     CloseHandle(hStdOutRd);
+
 
     if (exit_code != 0 && error_msg.empty()) {
         error_msg = "RE (exit code: " + std::to_string(exit_code) + ")";
@@ -634,18 +765,27 @@ std::string exec_cmd_with_input(const std::string& cmd, const std::string& input
 std::string trim_trailing(const std::string& s) {
     size_t end = s.find_last_not_of(" \t\n\r");
     if (end == std::string::npos) return "";
-    // Keep internal newlines, just remove trailing whitespace
-    std::string r = s.substr(0, end + 1);
-    // Also normalize \r\n to \n
-    std::string norm;
-    for (size_t i = 0; i < r.size(); i++) {
-        if (r[i] == '\r') continue;
-        norm += r[i];
-    }
-    return norm;
+    return s.substr(0, end + 1);
 }
 
-JudgeResult judge_submission(const std::string& code, const Problem& problem, const std::string& work_dir) {
+bool compare_outputs(const std::string& got, const std::string& exp) {
+    auto get_clean_view = [](const std::string& s) {
+        size_t end = s.find_last_not_of(" \t\n\r");
+        if (end == std::string::npos) return std::string("");
+        std::string res;
+        res.reserve(end + 1);
+        for (size_t i = 0; i <= end; ++i) {
+            if (s[i] != '\r') res += s[i];
+        }
+        return res;
+    };
+    return get_clean_view(got) == get_clean_view(exp);
+}
+
+static std::string g_compiler_path = "g++";
+
+JudgeResult judge_submission(const std::string& code, const Problem& problem, const std::string& work_dir, const std::string& compiler_path = "") {
+    std::string gxx = compiler_path.empty() ? g_compiler_path : compiler_path;
     JudgeResult result;
     result.total = (int)problem.test_cases.size();
 
@@ -682,13 +822,23 @@ JudgeResult judge_submission(const std::string& code, const Problem& problem, co
     // Write source
     write_file(src_path, code);
 
-    // Compile
-    std::string compile_cmd = "g++ -std=c++17 -O2 -o \"" + exe_path + "\" \"" + src_path + "\" 2>&1";
-    std::string compile_out = exec_cmd(compile_cmd, 15000);
+    // Compile with fallback if -std=c++17 not supported (old MinGW)
+    std::string compile_out;
+    std::vector<std::string> std_flags = {"-std=c++17", "-std=c++11", ""};
+    bool compiled = false;
+    for (const auto& flag : std_flags) {
+        std::string compile_cmd = gxx;
+        if (!flag.empty()) compile_cmd += " " + flag;
+        compile_cmd += " -O2 -o \"" + exe_path + "\" \"" + src_path + "\" 2>&1";
+        compile_out = exec_cmd(compile_cmd, 15000);
+        if (fs::exists(exe_path)) { compiled = true; break; }
+    }
 
-    if (!fs::exists(exe_path)) {
+    if (!compiled) {
         result.verdict = "CE";
-        result.compile_error = compile_out;
+        // Include the attempted command and last output in error
+        std::string last_cmd = gxx + " -std=c++17 -O2 -o \"" + exe_path + "\" \"" + src_path + "\"";
+        result.compile_error = "Command: " + last_cmd + "\n\nError:\n" + compile_out;
         return result;
     }
 
@@ -719,9 +869,7 @@ JudgeResult judge_submission(const std::string& code, const Problem& problem, co
             tr.status = "RE";
             tr.error = error;
         } else {
-            std::string got = trim_trailing(output);
-            std::string exp = trim_trailing(tr.expected);
-            if (got == exp) {
+            if (compare_outputs(output, tr.expected)) {
                 tr.status = "AC";
                 result.passed++;
             } else {
@@ -792,7 +940,577 @@ JudgeResult judge_submission(const std::string& code, const Problem& problem, co
 }
 
 // ---------- AI Client ----------
-// WinHTTP AI Problem generator functions removed as they are no longer needed.
+
+struct AIRequest {
+    std::string provider;
+    std::string model;
+    std::string api_key;
+    std::string category;
+    std::string sub_type;
+    int subtask_count;
+    std::string rating; // "easy", "medium", "hard", "hardcore", "ioi", "only-ai", or ""
+};
+
+static std::string winhttp_post_json(const std::string& host, int port, const std::string& path,
+                                      const std::string& extra_headers, const std::string& body,
+                                      int timeout_ms = 120000) {
+    HINTERNET hSession = WinHttpOpen(L"OJ-Agent/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                      nullptr, nullptr, 0);
+    if (!hSession) return "";
+
+    HINTERNET hConnect = WinHttpConnect(hSession, std::wstring(host.begin(), host.end()).c_str(), port, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return ""; }
+
+    DWORD flags = port == 443 ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST",
+        std::wstring(path.begin(), path.end()).c_str(), nullptr, nullptr, nullptr, flags);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return ""; }
+
+    // Set timeouts
+    WinHttpSetTimeouts(hRequest, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+
+    // Set security flags for self-signed etc
+    if (port == 443) {
+        DWORD sec_flags = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE |
+                          SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;
+        WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &sec_flags, sizeof(sec_flags));
+    }
+
+    // Headers
+    std::wstring wheaders(extra_headers.begin(), extra_headers.end());
+    WinHttpAddRequestHeaders(hRequest, wheaders.c_str(), wheaders.size(), WINHTTP_ADDREQ_FLAG_ADD);
+
+    // Send
+    if (!WinHttpSendRequest(hRequest, nullptr, 0, (void*)body.data(), body.size(), body.size(), 0)) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        return "";
+    }
+    if (!WinHttpReceiveResponse(hRequest, nullptr)) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        return "";
+    }
+
+    std::string result;
+    char buf[8192];
+    DWORD read = 0;
+    while (WinHttpReadData(hRequest, buf, sizeof(buf) - 1, &read) && read > 0) {
+        buf[read] = 0;
+        result += buf;
+        read = 0;
+    }
+
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+    return result;
+}
+
+static std::string winhttp_get(const std::string& host, int port, const std::string& path,
+                                const std::string& extra_headers = "",
+                                int timeout_ms = 30000) {
+    HINTERNET hSession = WinHttpOpen(L"OJ-Agent/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                      nullptr, nullptr, 0);
+    if (!hSession) return "";
+
+    HINTERNET hConnect = WinHttpConnect(hSession, std::wstring(host.begin(), host.end()).c_str(), port, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return ""; }
+
+    DWORD flags = port == 443 ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET",
+        std::wstring(path.begin(), path.end()).c_str(), nullptr, nullptr, nullptr, flags);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return ""; }
+
+    WinHttpSetTimeouts(hRequest, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+
+    if (port == 443) {
+        DWORD sec_flags = SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE |
+                          SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;
+        WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &sec_flags, sizeof(sec_flags));
+    }
+
+    if (!extra_headers.empty()) {
+        std::wstring wheaders(extra_headers.begin(), extra_headers.end());
+        WinHttpAddRequestHeaders(hRequest, wheaders.c_str(), wheaders.size(), WINHTTP_ADDREQ_FLAG_ADD);
+    }
+
+    if (!WinHttpSendRequest(hRequest, nullptr, 0, nullptr, 0, 0, 0)) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        return "";
+    }
+    if (!WinHttpReceiveResponse(hRequest, nullptr)) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        return "";
+    }
+
+    std::string result;
+    char buf[8192];
+    DWORD read = 0;
+    while (WinHttpReadData(hRequest, buf, sizeof(buf) - 1, &read) && read > 0) {
+        buf[read] = 0;
+        result += buf;
+        read = 0;
+    }
+
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+    return result;
+}
+
+static bool sync_problems_from_github(const std::string& repo, const std::string& local_dir) {
+    // repo format: "owner/repo"
+    // Uses GitHub API: GET /repos/{owner}/{repo}/contents/problems
+    // Then downloads each .json file via its download_url
+    std::string api_path = "/repos/" + repo + "/contents/problems";
+    std::string raw = winhttp_get("api.github.com", 443, api_path,
+                                   "Accept: application/vnd.github.v3+json\r\n"
+                                   "User-Agent: OJ-Sync/1.0\r\n", 15000);
+    if (raw.empty()) {
+        std::cerr << "[GitHub Sync] Failed to contact GitHub API\n";
+        return false;
+    }
+
+    JsonParser parser(raw);
+    auto j = parser.parse();
+    if (j.type == JsonValue::Null) {
+        std::cerr << "[GitHub Sync] Invalid response from GitHub API\n";
+        return false;
+    }
+    if (j.type == JsonValue::Object && !j.get_string("message").empty()) {
+        std::cerr << "[GitHub Sync] API error: " << j.get_string("message") << "\n";
+        return false;
+    }
+    if (j.type != JsonValue::Array) {
+        std::cerr << "[GitHub Sync] Unexpected response format\n";
+        return false;
+    }
+
+    fs::create_directories(local_dir);
+    int count = 0;
+    for (const auto& item : j.arr_val) {
+        std::string name = item.get_string("name");
+        std::string download_url = item.get_string("download_url");
+        if (name.size() < 5 || name.substr(name.size() - 5) != ".json") continue;
+        if (download_url.empty()) continue;
+
+        std::string content = winhttp_get("raw.githubusercontent.com", 443,
+                                           "/" + repo + "/main/problems/" + name,
+                                           "User-Agent: OJ-Sync/1.0\r\n", 10000);
+        if (content.empty()) {
+            std::cerr << "[GitHub Sync] Failed to download: " << name << "\n";
+            continue;
+        }
+
+        std::string local_path = local_dir + "/" + name;
+        write_file(local_path, content);
+        count++;
+        std::cout << "[GitHub Sync] Downloaded: " << name << "\n";
+    }
+    std::cout << "[GitHub Sync] Downloaded " << count << " problems from " << repo << "\n";
+    return true;
+}
+
+static int fast_rand() {
+    static unsigned int seed = (unsigned int)std::chrono::system_clock::now().time_since_epoch().count();
+    seed = seed * 1103515245 + 12345;
+    return (seed >> 16) & 0x7FFF;
+}
+
+static std::string build_system_prompt() {
+    std::vector<std::string> intros = {
+        "Bạn là người ra đề thi lập trình thi đấu (competitive programming). ",
+        "Bạn là chuyên gia ra đề thi Olympic Tin học. ",
+        "Bạn là giáo viên dạy lập trình, hãy tạo một bài tập lập trình. ",
+        "Bạn là người tạo đề thi Codeforces, hãy ra một bài toán lập trình. "
+    };
+    std::vector<std::string> closings = {
+        "Trả về CHỈ DUY NHẤT JSON, không kèm markdown hay giải thích gì thêm.",
+        "Chỉ trả về JSON, KHÔNG có bất kỳ văn bản nào khác ngoài JSON.",
+        "Tuyệt đối chỉ xuất ra JSON, không thêm bất kỳ chú thích hay giải thích nào."
+    };
+
+    // Randomize test case count requirement
+    int min_tc = 5 + fast_rand() % 10;
+    std::string tc_req = "test_cases phải có ít nhất " + std::to_string(min_tc) +
+        " test case, bao gồm cả edge cases, test nhỏ, test ngẫu nhiên, test lớn.";
+
+    std::string prompt =
+        intros[fast_rand() % intros.size()] +
+        "Hãy tạo một bài toán theo đúng định dạng JSON sau đây, KHÔNG thêm bất kỳ văn bản nào khác:\n"
+        "{\n"
+        "  \"title\": \"Tên bài toán bằng tiếng Việt\",\n"
+        "  \"difficulty\": \"easy|medium|hard\",\n"
+        "  \"cf_rating\": <số nguyên 800-3500 theo Codeforces rating>,\n"
+        "  \"description\": \"Mô tả bài toán bằng tiếng Việt\",\n"
+        "  \"input_format\": \"Định dạng đầu vào bằng tiếng Việt\",\n"
+        "  \"output_format\": \"Định dạng đầu ra bằng tiếng Việt\",\n"
+        "  \"constraints\": \"Ràng buộc tổng thể\",\n"
+        "  \"subtasks\": [\n"
+        "    { \"id\": 1, \"points\": <số điểm>, \"constraints\": \"Ràng buộc subtask 1\" },\n"
+        "    { \"id\": 2, \"points\": <số điểm>, \"constraints\": \"Ràng buộc subtask 2\" },\n"
+        "    ...\n"
+        "  ],\n"
+        "  \"samples\": [\n"
+        "    { \"input\": \"input mẫu\\n\", \"output\": \"output mẫu\\n\", \"explanation\": \"Giải thích\" }\n"
+        "  ],\n"
+        "  \"test_cases\": [\n"
+        "    { \"input\": \"test input\\n\", \"output\": \"test output\\n\", \"subtask\": <id subtask> },\n"
+        "    ...\n"
+        "  ]\n"
+        "}\n\n"
+        "Yêu cầu:\n"
+        "1. Tổng điểm các subtask phải bằng 100.\n"
+        "2. " + tc_req + "\n"
+        "3. input và output trong test_cases phải dùng \\n để xuống dòng.\n"
+        "4. Dữ liệu test phải đa dạng, bao phủ mọi trường hợp.\n"
+        "5. cf_rating: Easy(<1000), Medium(1000-1499), Hard(1500-1999), Hardcore(2000-2499), IOI-ICPC(2500-3000), Only AI(>3000). Chọn rating phù hợp với độ khó.\n"
+        "6. " + closings[fast_rand() % closings.size()];
+    return prompt;
+}
+
+static std::string rating_prompt(const std::string& rating) {
+    if (rating == "easy") return "Độ khó mục tiêu: Easy (CF Rating < 1000). Bài toán dành cho người mới bắt đầu.";
+    if (rating == "medium") return "Độ khó mục tiêu: Medium (CF Rating 1000-1499). Bài toán cơ bản.";
+    if (rating == "hard") return "Độ khó mục tiêu: Hard (CF Rating 1500-1999). Bài toán yêu cầu tư duy.";
+    if (rating == "hardcore") return "Độ khó mục tiêu: Hardcore (CF Rating 2000-2499). Bài toán khó.";
+    if (rating == "ioi") return "Độ khó mục tiêu: IOI-ICPC (CF Rating 2500-3000). Bài toán rất khó, cấp độ Olympic.";
+    if (rating == "only-ai") return "Độ khó mục tiêu: Only AI (CF Rating > 3000). Bài toán siêu khó, chỉ AI mới giải được.";
+    return "";
+}
+
+static std::string build_user_prompt(const AIRequest& req) {
+    std::string rating_info = rating_prompt(req.rating);
+    std::string rating_line = rating_info.empty() ? "" : "\n" + rating_info + "\n";
+
+    std::vector<std::string> templates = {
+        "Hãy tạo một bài toán lập trình với các thông tin sau:\n"
+        "- Thể loại: %s\n"
+        "- Dạng cụ thể: %s\n"
+        "- Số subtask: %d\n%s"
+        "\nHãy tạo một bài toán phù hợp với thể loại và dạng đã chọn. "
+        "Bài toán nên có độ khó phù hợp, test cases đầy đủ và chính xác. "
+        "Các test case phải có input và output đúng, bao gồm các trường hợp biên.",
+
+        "Tạo bài tập lập trình chủ đề \"%s\" - dạng \"%s\" với %d subtask.%s\n"
+        "Bài toán cần có mô tả rõ ràng, input/output cụ thể. "
+        "Test case phải bao phủ đủ các trường hợp đặc biệt và giới hạn.",
+
+        "Yêu cầu: Tạo một bài toán thuộc thể loại \"%s\", kiểu \"%s\".\n"
+        "Số subtask: %d.%s\n"
+        "Viết mô tả, input/output, ràng buộc, và test cases chi tiết. "
+        "Chú ý các edge cases và test ngẫu nhiên kích thước lớn.",
+
+        "Hãy ra đề:\n"
+        "  - Thể loại: %s\n"
+        "  - Dạng bài: %s\n"
+        "  - Số subtask: %d%s\n\n"
+        "Soạn thảo bài toán hoàn chỉnh với test cases đầy đủ, dữ liệu chính xác."
+    };
+
+    char buf[2048];
+    int idx = fast_rand() % (int)templates.size();
+    snprintf(buf, sizeof(buf), templates[idx].c_str(),
+             req.category.c_str(), req.sub_type.c_str(), req.subtask_count, rating_line.c_str());
+    return std::string(buf);
+}
+
+static std::string extract_json(const std::string& response) {
+    // Try to find JSON between ```json ... ```
+    size_t start_marker = response.find("```json");
+    if (start_marker != std::string::npos) {
+        start_marker += 7;
+        size_t end_marker = response.find("```", start_marker);
+        if (end_marker != std::string::npos) {
+            return response.substr(start_marker, end_marker - start_marker);
+        }
+    }
+    // Try ``` ... ```
+    start_marker = response.find("```");
+    if (start_marker != std::string::npos) {
+        start_marker += 3;
+        // Skip language identifier if any
+        size_t nl = response.find('\n', start_marker);
+        if (nl != std::string::npos && nl - start_marker < 20) start_marker = nl + 1;
+        size_t end_marker = response.find("```", start_marker);
+        if (end_marker != std::string::npos) {
+            return response.substr(start_marker, end_marker - start_marker);
+        }
+    }
+    // Fallback: find first { and last }
+    size_t first = response.find('{');
+    size_t last = response.rfind('}');
+    if (first != std::string::npos && last != std::string::npos && last > first) {
+        return response.substr(first, last - first + 1);
+    }
+    return response;
+}
+
+static std::string call_openai_like(const std::string& host, const std::string& path,
+                                     const std::string& api_key, const std::string& model,
+                                     const std::string& system_prompt, const std::string& user_prompt,
+                                     const std::string& auth_header_prefix = "Bearer ") {
+    JsonValue body(JsonValue::Object);
+    body.set("model", JsonValue(model));
+
+    JsonValue msgs(JsonValue::Array);
+    JsonValue sys(JsonValue::Object);
+    sys.set("role", JsonValue("system"));
+    sys.set("content", JsonValue(system_prompt));
+    msgs.push(sys);
+
+    JsonValue usr(JsonValue::Object);
+    usr.set("role", JsonValue("user"));
+    usr.set("content", JsonValue(user_prompt));
+    msgs.push(usr);
+
+    body.set("messages", msgs);
+    double temp = 0.5 + (fast_rand() % 50) / 100.0;
+    body.set("temperature", JsonValue(temp));
+    body.set("max_tokens", JsonValue(4000.0));
+
+    std::string json_body = body.to_string();
+    std::string headers = "Content-Type: application/json\r\nAuthorization: " + auth_header_prefix + api_key;
+    std::string raw = winhttp_post_json(host, 443, path, headers, json_body);
+
+    if (raw.empty()) return "";
+
+    JsonParser parser(raw);
+    auto resp = parser.parse();
+    auto* choices = resp.get("choices");
+    if (choices && choices->type == JsonValue::Array && !choices->arr_val.empty()) {
+        auto* msg = choices->arr_val[0].get("message");
+        if (msg) {
+            return msg->get_string("content");
+        }
+    }
+    auto* err = resp.get("error");
+    if (err) {
+        return "__ERROR__:" + err->get_string("message");
+    }
+    return "";
+}
+
+static std::string call_openai(const std::string& api_key, const std::string& model,
+                                const std::string& system_prompt, const std::string& user_prompt) {
+    return call_openai_like("api.openai.com", "/v1/chat/completions",
+                            api_key, model, system_prompt, user_prompt);
+}
+
+static std::string call_deepseek(const std::string& api_key, const std::string& model,
+                                  const std::string& system_prompt, const std::string& user_prompt) {
+    return call_openai_like("api.deepseek.com", "/v1/chat/completions",
+                            api_key, model, system_prompt, user_prompt);
+}
+
+static std::string call_claude(const std::string& api_key, const std::string& model,
+                                const std::string& system_prompt, const std::string& user_prompt) {
+    JsonValue body(JsonValue::Object);
+    body.set("model", JsonValue(model));
+    body.set("max_tokens", JsonValue(4000.0));
+
+    JsonValue msgs(JsonValue::Array);
+    JsonValue usr(JsonValue::Object);
+    usr.set("role", JsonValue("user"));
+    usr.set("content", JsonValue(user_prompt));
+    msgs.push(usr);
+    body.set("messages", msgs);
+
+    body.set("system", JsonValue(system_prompt));
+
+    std::string json_body = body.to_string();
+    std::string headers = "Content-Type: application/json\r\nx-api-key: " + api_key +
+                          "\r\nanthropic-version: 2023-06-01";
+    std::string raw = winhttp_post_json("api.anthropic.com", 443, "/v1/messages", headers, json_body);
+
+    if (raw.empty()) return "";
+
+    JsonParser parser(raw);
+    auto resp = parser.parse();
+    auto* content = resp.get("content");
+    if (content && content->type == JsonValue::Array && !content->arr_val.empty()) {
+        return content->arr_val[0].get_string("text");
+    }
+    auto* err = resp.get("error");
+    if (err) {
+        return "__ERROR__:" + err->get_string("message");
+    }
+    return "";
+}
+
+static std::string call_gemini(const std::string& api_key, const std::string& model,
+                                const std::string& system_prompt, const std::string& user_prompt) {
+    JsonValue body(JsonValue::Object);
+
+    // system instruction
+    JsonValue sys_inst(JsonValue::Object);
+    JsonValue sys_parts(JsonValue::Array);
+    JsonValue sys_text(JsonValue::Object);
+    sys_text.set("text", JsonValue(system_prompt));
+    sys_parts.push(sys_text);
+    sys_inst.set("parts", sys_parts);
+    body.set("system_instruction", sys_inst);
+
+    // user content
+    JsonValue contents(JsonValue::Array);
+    JsonValue content_obj(JsonValue::Object);
+    JsonValue parts(JsonValue::Array);
+    JsonValue text_part(JsonValue::Object);
+    text_part.set("text", JsonValue(user_prompt));
+    parts.push(text_part);
+    content_obj.set("parts", parts);
+    contents.push(content_obj);
+    body.set("contents", contents);
+
+    // generation config
+    JsonValue gen_config(JsonValue::Object);
+    double temp = 0.5 + (fast_rand() % 50) / 100.0;
+    gen_config.set("temperature", JsonValue(temp));
+    gen_config.set("maxOutputTokens", JsonValue(4000.0));
+    body.set("generationConfig", gen_config);
+
+    std::string json_body = body.to_string();
+    std::string path = "/v1beta/models/" + model + ":generateContent?key=" + api_key;
+    std::string headers = "Content-Type: application/json";
+    std::string raw = winhttp_post_json("generativelanguage.googleapis.com", 443, path, headers, json_body);
+
+    if (raw.empty()) return "";
+
+    JsonParser parser(raw);
+    auto resp = parser.parse();
+    auto* candidates = resp.get("candidates");
+    if (candidates && candidates->type == JsonValue::Array && !candidates->arr_val.empty()) {
+        auto* content = candidates->arr_val[0].get("content");
+        if (content) {
+            auto* parts = content->get("parts");
+            if (parts && parts->type == JsonValue::Array && !parts->arr_val.empty()) {
+                return parts->arr_val[0].get_string("text");
+            }
+        }
+    }
+    auto* err = resp.get("error");
+    if (err) {
+        return "__ERROR__:" + err->get_string("message");
+    }
+    return "";
+}
+
+static std::string default_model_for(const std::string& provider) {
+    if (provider == "claude") return "claude-sonnet-4-6";
+    if (provider == "gemini") return "gemini-3.5-flash";
+    if (provider == "deepseek") return "deepseek-chat";
+    return "gpt-4o";
+}
+
+static Problem generate_problem_ai(const AIRequest& req, std::string& error) {
+    Problem prob;
+    std::string system_prompt = build_system_prompt();
+    std::string user_prompt = build_user_prompt(req);
+    std::string raw_response;
+    std::string model = req.model.empty() ? default_model_for(req.provider) : req.model;
+
+    if (req.provider == "claude") {
+        raw_response = call_claude(req.api_key, model, system_prompt, user_prompt);
+    } else if (req.provider == "gemini") {
+        raw_response = call_gemini(req.api_key, model, system_prompt, user_prompt);
+    } else if (req.provider == "deepseek") {
+        raw_response = call_deepseek(req.api_key, model, system_prompt, user_prompt);
+    } else {
+        raw_response = call_openai(req.api_key, model, system_prompt, user_prompt);
+    }
+
+    if (raw_response.empty()) {
+        error = "Không nhận được phản hồi từ AI. Vui lòng kiểm tra kết nối mạng.";
+        return prob;
+    }
+    if (raw_response.find("__ERROR__:") == 0) {
+        error = "Lỗi AI: " + raw_response.substr(10);
+        return prob;
+    }
+
+    std::string json_str = extract_json(raw_response);
+    if (json_str.empty()) {
+        error = "AI không trả về JSON hợp lệ.";
+        return prob;
+    }
+
+    JsonParser parser(json_str);
+    auto j = parser.parse();
+    if (j.type == JsonValue::Null) {
+        error = "Không thể phân tích JSON từ phản hồi của AI.";
+        return prob;
+    }
+
+    try {
+        prob.title = j.get_string("title", "Untitled");
+        prob.category = req.category;
+        prob.description = j.get_string("description", "");
+        prob.input_format = j.get_string("input_format", "");
+        prob.output_format = j.get_string("output_format", "");
+        prob.constraints = j.get_string("constraints", "");
+        prob.difficulty = j.get_string("difficulty", "medium");
+        prob.cf_rating = j.get_int("cf_rating", 800);
+        prob.time_limit = j.get_number("time_limit", 1.0);
+        prob.memory_limit = j.get_int("memory_limit", 256);
+
+        // Subtasks
+        auto* subtasks = j.get("subtasks");
+        if (subtasks && subtasks->type == JsonValue::Array) {
+            for (const auto& subj : subtasks->arr_val) {
+                Subtask sub;
+                sub.id = subj.get_int("id");
+                sub.points = subj.get_int("points");
+                sub.constraints = subj.get_string("constraints");
+                prob.subtasks.push_back(sub);
+            }
+        }
+
+        // Samples
+        auto* samples = j.get("samples");
+        if (samples && samples->type == JsonValue::Array) {
+            for (const auto& sj : samples->arr_val) {
+                Sample s;
+                s.input = sj.get_string("input");
+                s.expected = sj.get_string("output");
+                s.explanation = sj.get_string("explanation", "");
+                prob.samples.push_back(s);
+            }
+        }
+
+        // Test cases
+        auto* tcs = j.get("test_cases");
+        if (tcs && tcs->type == JsonValue::Array) {
+            for (const auto& tj : tcs->arr_val) {
+                TestCase tc;
+                tc.input = tj.get_string("input");
+                tc.expected = tj.get_string("output");
+                tc.subtask = tj.get_int("subtask", 0);
+                prob.test_cases.push_back(tc);
+            }
+        }
+
+        if (prob.description.empty()) {
+            error = "Thiếu trường description trong phản hồi AI.";
+            return prob;
+        }
+        if (prob.test_cases.empty()) {
+            error = "Không có test case nào được tạo.";
+            return prob;
+        }
+
+        // Generate ID
+        auto now = std::chrono::system_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        std::string safe_cat = req.category;
+        for (auto& c : safe_cat) if (c == ' ') c = '_';
+        prob.id = "ai_" + safe_cat + "_" + std::to_string(ms % 100000000);
+
+    } catch (const std::exception& e) {
+        error = std::string("Lỗi xử lý JSON: ") + e.what();
+        return prob;
+    }
+
+    return prob;
+}
 
 // ---------- HTTP Server ----------
 class HttpServer {
@@ -800,6 +1518,7 @@ class HttpServer {
     int port;
     std::string static_dir;
     ProblemManager& problem_mgr;
+    ContestManager& contest_mgr;
     bool running = false;
 
     struct Request {
@@ -941,6 +1660,7 @@ class HttpServer {
                 j.set("id", JsonValue(p.id));
                 j.set("title", JsonValue(p.title));
                 j.set("difficulty", JsonValue(p.difficulty));
+                j.set("cf_rating", JsonValue((double)p.cf_rating));
                 j.set("category", JsonValue(p.category));
                 j.set("test_count", JsonValue((double)p.test_cases.size()));
                 j.set("subtask_count", JsonValue((double)p.subtasks.size()));
@@ -967,6 +1687,89 @@ class HttpServer {
             return resp;
         }
 
+        // GET /api/contests
+        if (path == "/api/contests" && req.method == "GET") {
+            auto contests = contest_mgr.list();
+            JsonValue arr(JsonValue::Array);
+            for (const auto& c : contests) {
+                JsonValue j(JsonValue::Object);
+                j.set("id", JsonValue(c.id));
+                j.set("title", JsonValue(c.title));
+                j.set("description", JsonValue(c.description));
+                j.set("time_limit_minutes", JsonValue((double)c.time_limit_minutes));
+                j.set("total_points", JsonValue((double)c.total_points));
+                j.set("problem_count", JsonValue((double)c.problems.size()));
+                arr.push(j);
+            }
+            resp.body = arr.to_string();
+            return resp;
+        }
+
+        // GET /api/contest/{id}
+        if (path.find("/api/contest/") == 0 && req.method == "GET") {
+            std::string id = path.substr(13);
+            id = url_decode(id);
+            const Contest* c = contest_mgr.get(id);
+            if (!c) {
+                resp.status = 404;
+                resp.status_text = "Not Found";
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Contest not found"));
+                resp.body = err.to_string();
+            } else {
+                JsonValue cj(JsonValue::Object);
+                cj.set("id", JsonValue(c->id));
+                cj.set("title", JsonValue(c->title));
+                cj.set("description", JsonValue(c->description));
+                cj.set("time_limit_minutes", JsonValue((double)c->time_limit_minutes));
+                cj.set("total_points", JsonValue((double)c->total_points));
+                
+                JsonValue probs_arr(JsonValue::Array);
+                for (const auto& cp : c->problems) {
+                    JsonValue pj(JsonValue::Object);
+                    pj.set("id", JsonValue(cp.problem_id));
+                    pj.set("points", JsonValue((double)cp.points));
+                    
+                    const Problem* p = problem_mgr.get(cp.problem_id);
+                    if (p) {
+                        pj.set("title", JsonValue(p->title));
+                        pj.set("difficulty", JsonValue(p->difficulty));
+                        pj.set("cf_rating", JsonValue((double)p->cf_rating));
+                        pj.set("time_limit", JsonValue(p->time_limit));
+                        pj.set("memory_limit", JsonValue((double)p->memory_limit));
+                        pj.set("description", JsonValue(p->description));
+                        pj.set("input_format", JsonValue(p->input_format));
+                        pj.set("output_format", JsonValue(p->output_format));
+                        pj.set("constraints", JsonValue(p->constraints));
+                        
+                        JsonValue subtasks_arr(JsonValue::Array);
+                        for (const auto& sub : p->subtasks) {
+                            JsonValue subj(JsonValue::Object);
+                            subj.set("id", JsonValue((double)sub.id));
+                            subj.set("points", JsonValue((double)sub.points));
+                            subj.set("constraints", JsonValue(sub.constraints));
+                            subtasks_arr.push(subj);
+                        }
+                        pj.set("subtasks", subtasks_arr);
+
+                        JsonValue samples_arr(JsonValue::Array);
+                        for (const auto& s : p->samples) {
+                            JsonValue sj(JsonValue::Object);
+                            sj.set("input", JsonValue(s.input));
+                            sj.set("output", JsonValue(s.expected));
+                            sj.set("explanation", JsonValue(s.explanation));
+                            samples_arr.push(sj);
+                        }
+                        pj.set("samples", samples_arr);
+                    }
+                    probs_arr.push(pj);
+                }
+                cj.set("problems", probs_arr);
+                resp.body = cj.to_string();
+            }
+            return resp;
+        }
+
         // POST /api/judge
         if (path == "/api/judge" && req.method == "POST") {
             JsonParser parser(req.body);
@@ -975,6 +1778,7 @@ class HttpServer {
             std::string problem_id = j.get_string("problem_id");
             std::string code = j.get_string("code");
             std::string language = j.get_string("language", "cpp");
+            std::string compiler_path = j.get_string("compiler_path", "");
 
             if (problem_id.empty() || code.empty()) {
                 JsonValue err(JsonValue::Object);
@@ -1001,7 +1805,7 @@ class HttpServer {
             // Generate unique work dir
             std::string work_dir = "submissions/" + problem_id + "_" + std::to_string(GetCurrentProcessId());
 
-            auto judge_result = judge_submission(code, *problem, work_dir);
+            auto judge_result = judge_submission(code, *problem, work_dir, compiler_path);
 
             JsonValue jr(JsonValue::Object);
             jr.set("verdict", JsonValue(judge_result.verdict));
@@ -1048,12 +1852,78 @@ class HttpServer {
             return resp;
         }
 
+        // POST /api/generate
+        if (path == "/api/generate" && req.method == "POST") {
+            JsonParser gen_parser(req.body);
+            auto gen_j = gen_parser.parse();
+
+            AIRequest ai_req;
+            ai_req.provider = gen_j.get_string("provider", "openai");
+            ai_req.model = gen_j.get_string("model", "");
+            ai_req.api_key = gen_j.get_string("api_key", "");
+            ai_req.category = gen_j.get_string("category", "");
+            ai_req.sub_type = gen_j.get_string("sub_type", "");
+            ai_req.subtask_count = gen_j.get_int("subtask_count", 3);
+            ai_req.rating = gen_j.get_string("rating", "");
+
+            if (ai_req.api_key.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Vui lòng nhập API key."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            if (ai_req.category.empty() || ai_req.sub_type.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Vui lòng chọn thể loại và dạng bài."));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            std::string error;
+            Problem prob = generate_problem_ai(ai_req, error);
+
+            if (!error.empty()) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue(error));
+                resp.body = err.to_string();
+                return resp;
+            }
+
+            // Save to file
+            fs::create_directories("problems");
+            std::string filename = "problems/" + prob.id + ".json";
+            std::string json_out = prob.to_json().to_string();
+            std::ofstream f(filename);
+            if (!f) {
+                JsonValue err(JsonValue::Object);
+                err.set("error", JsonValue("Không thể ghi file bài tập."));
+                resp.body = err.to_string();
+                return resp;
+            }
+            f << json_out;
+            f.close();
+
+            // Try to auto-reload
+            problem_mgr.load_all();
+
+            JsonValue ok(JsonValue::Object);
+            ok.set("status", JsonValue("success"));
+            ok.set("problem_id", JsonValue(prob.id));
+            ok.set("title", JsonValue(prob.title));
+            ok.set("test_count", JsonValue((double)prob.test_cases.size()));
+            ok.set("subtask_count", JsonValue((double)prob.subtasks.size()));
+            resp.body = ok.to_string();
+            return resp;
+        }
+
         // POST /api/reload
         if (path == "/api/reload" && req.method == "POST") {
             problem_mgr.load_all();
+            contest_mgr.load_all();
             JsonValue ok(JsonValue::Object);
             ok.set("status", JsonValue("success"));
             ok.set("count", JsonValue((double)problem_mgr.list().size()));
+            ok.set("contest_count", JsonValue((double)contest_mgr.list().size()));
             resp.body = ok.to_string();
             return resp;
         }
@@ -1120,8 +1990,8 @@ class HttpServer {
     }
 
 public:
-    HttpServer(int port, const std::string& static_dir, ProblemManager& pm)
-        : port(port), static_dir(static_dir), problem_mgr(pm) {}
+    HttpServer(int port, const std::string& static_dir, ProblemManager& pm, ContestManager& cm)
+        : port(port), static_dir(static_dir), problem_mgr(pm), contest_mgr(cm) {}
 
     bool start() {
         WSADATA wsa;
@@ -1194,20 +2064,55 @@ int main() {
     int port = 8080;
     std::string static_dir = "static";
     std::string problems_dir = "problems";
+    std::string github_repo = "";
 
-    // Check args
-    if (__argc > 1) port = std::stoi(__argv[1]);
-    if (__argc > 2) static_dir = __argv[2];
-    if (__argc > 3) problems_dir = __argv[3];
+    bool force_sync = false;
+
+    // Parse args
+    for (int i = 1; i < __argc; i++) {
+        std::string arg = __argv[i];
+        if (arg == "--repo" && i + 1 < __argc) {
+            github_repo = __argv[++i];
+        } else if (arg == "--force") {
+            force_sync = true;
+        } else if (arg == "--g++" && i + 1 < __argc) {
+            g_compiler_path = __argv[++i];
+        } else if (arg == "--port" && i + 1 < __argc) {
+            port = std::stoi(__argv[++i]);
+        } else if (arg == "--static" && i + 1 < __argc) {
+            static_dir = __argv[++i];
+        } else if (arg == "--problems" && i + 1 < __argc) {
+            problems_dir = __argv[++i];
+        } else if (arg[0] != '-') {
+            // positional: port
+            port = std::stoi(arg);
+        }
+    }
+
+    std::string contests_dir = "contests";
+
+    // Sync problems from GitHub if --repo is given
+    if (!github_repo.empty()) {
+        bool has_local = fs::exists(problems_dir) && !fs::is_empty(problems_dir);
+        if (force_sync || !has_local) {
+            std::cout << "Syncing problems from GitHub: " << github_repo << "\n";
+            sync_problems_from_github(github_repo, problems_dir);
+        } else {
+            std::cout << "Problems directory exists locally, skipping GitHub sync.\n";
+            std::cout << "Use --repo --force to re-download.\n";
+        }
+    }
 
     ProblemManager problem_mgr(problems_dir);
-    HttpServer server(port, static_dir, problem_mgr);
+    ContestManager contest_mgr(contests_dir);
+    HttpServer server(port, static_dir, problem_mgr, contest_mgr);
 
     std::cout << "==========================================\n";
     std::cout << "  Local OJ Server\n";
     std::cout << "  Port: " << port << "\n";
     std::cout << "  Static: " << fs::absolute(static_dir).string() << "\n";
     std::cout << "  Problems: " << fs::absolute(problems_dir).string() << "\n";
+    std::cout << "  Compiler: " << g_compiler_path << "\n";
     std::cout << "==========================================\n";
 
     server.start();
