@@ -186,19 +186,6 @@
               </div>
             </div>
 
-            <!-- AI Chat -->
-            <div class="statement-section chat-section">
-              <h3><i data-lucide="bot" style="width:16px;height:16px;vertical-align:middle;"></i> Hỏi đáp AI</h3>
-              <div class="chat-messages" id="chatMessages">
-                <div class="chat-msg chat-msg-ai">
-                  <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
-                </div>
-              </div>
-              <div class="chat-input-area">
-                <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
-                <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
-              </div>
-            </div>
           </div>
         </article>
 
@@ -261,6 +248,23 @@
               <button onclick="showDetailedResultModal()" class="btn-detail-result">
                 Xem chi tiết các testcase <i data-lucide="arrow-right"></i>
               </button>
+            </div>
+
+            <!-- AI Chat -->
+            <div class="chat-section-submit">
+              <div class="chat-header-submit">
+                <i data-lucide="bot" style="width:16px;height:16px;"></i>
+                <span>Hỏi đáp AI</span>
+              </div>
+              <div class="chat-messages" id="chatMessages">
+                <div class="chat-msg chat-msg-ai">
+                  <div class="chat-msg-content">Xin chào! Tôi có thể giúp gì về bài tập này?</div>
+                </div>
+              </div>
+              <div class="chat-input-area">
+                <textarea id="chatInput" rows="2" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}"></textarea>
+                <button onclick="sendChatMessage()" class="chat-send-btn" id="chatSendBtn"><i data-lucide="send"></i></button>
+              </div>
             </div>
           </div>
         </aside>

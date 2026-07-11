@@ -646,15 +646,26 @@ button {
   margin-bottom: 8px;
 }
 
-/* AI Chat Section (left column, full height) */
-.chat-section {
+/* AI Chat Section (inside submit column) */
+.chat-section-submit {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  margin-top: 16px;
+  min-height: 0;
 }
-.chat-section .chat-messages {
+.chat-header-submit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.chat-section-submit .chat-messages {
   flex: 1;
-  min-height: 300px;
-  max-height: 600px;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -662,7 +673,7 @@ button {
   gap: 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   margin-bottom: 8px;
 }
 .chat-msg {
@@ -683,7 +694,7 @@ button {
   word-wrap: break-word;
 }
 .chat-msg-ai .chat-msg-content {
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
 }
@@ -852,8 +863,15 @@ button {
 /* ==========================================================================
    Submit Column
    ========================================================================== */
+.submit-column {
+  display: flex;
+  flex-direction: column;
+}
 .submit-card {
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .sticky-panel {
