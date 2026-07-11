@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.3.0 (2026-07-11)
+- AI Chat panel below "Nộp bài giải"
+- `POST /api/chat` — gửi câu hỏi + context đề bài lên AI
+- Enter để gửi, collapsible header, tự động cuộn
+- Dùng chung API key/provider từ Settings
+
 ## v2.2.2 (2026-07-11)
 - Added `\lfloor`, `\rfloor`, `\lceil`, `\rceil` support in math rendering
 
